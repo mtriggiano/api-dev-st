@@ -108,4 +108,27 @@ export const logs = {
     api.get(`/api/logs/stats?hours=${hours}`),
 };
 
+export const backup = {
+  list: () => 
+    api.get('/api/backup/list'),
+  
+  create: () => 
+    api.post('/api/backup/create'),
+  
+  download: (filename) => 
+    api.get(`/api/backup/download/${filename}`, { responseType: 'blob' }),
+  
+  delete: (filename) => 
+    api.delete(`/api/backup/delete/${filename}`),
+  
+  getConfig: () => 
+    api.get('/api/backup/config'),
+  
+  updateConfig: (config) => 
+    api.put('/api/backup/config', config),
+  
+  getLog: () => 
+    api.get('/api/backup/log'),
+};
+
 export default api;

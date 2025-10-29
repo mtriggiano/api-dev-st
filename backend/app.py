@@ -19,11 +19,13 @@ def create_app():
     from routes.metrics import metrics_bp
     from routes.instances import instances_bp
     from routes.logs import logs_bp
+    from routes.backup import backup_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(metrics_bp, url_prefix='/api/metrics')
     app.register_blueprint(instances_bp, url_prefix='/api/instances')
     app.register_blueprint(logs_bp, url_prefix='/api/logs')
+    app.register_blueprint(backup_bp, url_prefix='/api/backup')
     
     # Manejadores de errores JWT
     @jwt.expired_token_loader
@@ -52,7 +54,8 @@ def create_app():
                 'auth': '/api/auth',
                 'metrics': '/api/metrics',
                 'instances': '/api/instances',
-                'logs': '/api/logs'
+                'logs': '/api/logs',
+                'backup': '/api/backup'
             }
         }), 200
     
