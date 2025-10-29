@@ -429,3 +429,33 @@ class InstanceManager:
             }
         except Exception as e:
             return {'success': False, 'error': str(e)}
+    
+    def regenerate_assets(self, instance_name):
+        """Regenera los assets de una instancia de desarrollo"""
+        self._init_paths()
+        instance_path = os.path.join(self.dev_root, instance_name)
+        script_path = os.path.join(instance_path, 'regenerate-assets.sh')
+        
+        if not os.path.exists(script_path):
+            return {'success': False, 'error': 'Script regenerate-assets.sh no encontrado'}
+        
+        try:
+            # Ejecutar script en background con log
+            cmd = f"echo 's' | /bin/bash {script_path} > /tmp/odoo-regenerate-assets-{instance_name}.log 2>&1 &"
+            subprocess.Popen(
+                cmd,
+                shell=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+                cwd=instance_path
+            )
+            
+            return {
+                'success': True,
+                'message': f'Regeneración de assets iniciada. Ver logs: /tmp/odoo-regenerate-assets-{instance_name}.log',
+                'log_file': f'/tmp/odoo-regenerate-assets-{instance_name}.log'
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}

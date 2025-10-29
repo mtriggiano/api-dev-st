@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { instances } from '../lib/api';
-import { Server, Play, Square, Trash2, RefreshCw, Database, FileText, Plus, Eye, AlertCircle, FolderSync } from 'lucide-react';
+import { Server, Play, Square, Trash2, RefreshCw, Database, FileText, Plus, Eye, AlertCircle, FolderSync, Palette } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import Toast from './Toast';
 
@@ -47,13 +47,15 @@ export default function Instances() {
     try {
       let response;
       
-      // Para update-db, update-files y sync-filestore, mostrar modal con log
-      if (action === 'update-db' || action === 'update-files' || action === 'sync-filestore') {
+      // Para update-db, update-files, sync-filestore y regenerate-assets, mostrar modal con log
+      if (action === 'update-db' || action === 'update-files' || action === 'sync-filestore' || action === 'regenerate-assets') {
         response = action === 'update-db' 
           ? await instances.updateDb(instanceName)
           : action === 'update-files'
           ? await instances.updateFiles(instanceName)
-          : await instances.syncFilestore(instanceName);
+          : action === 'sync-filestore'
+          ? await instances.syncFilestore(instanceName)
+          : await instances.regenerateAssets(instanceName);
         
         if (response.data.success) {
           setUpdateLog({ show: true, instanceName, action, log: 'Iniciando actualizaci\u00f3n...\n', completed: false });
@@ -325,7 +327,7 @@ export default function Instances() {
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[80vh] flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                {updateLog.action === 'update-db' ? 'Actualizando Base de Datos' : updateLog.action === 'update-files' ? 'Actualizando Archivos' : 'Sincronizando Filestore'}: {updateLog.instanceName}
+                {updateLog.action === 'update-db' ? 'Actualizando Base de Datos' : updateLog.action === 'update-files' ? 'Actualizando Archivos' : updateLog.action === 'sync-filestore' ? 'Sincronizando Filestore' : 'Regenerando Assets'}: {updateLog.instanceName}
               </h3>
               <button
                 onClick={() => setUpdateLog({ show: false, instanceName: '', action: '', log: '', completed: false })}
@@ -483,6 +485,7 @@ function getConfirmTitle(action) {
     'update-db': 'Actualizar Base de Datos',
     'update-files': 'Actualizar Archivos',
     'sync-filestore': 'Sincronizar Filestore',
+    'regenerate-assets': 'Regenerar Assets',
     delete: 'Eliminar Instancia'
   };
   return titles[action] || 'Confirmar Acción';
@@ -494,6 +497,7 @@ function getConfirmMessage(action, instanceName) {
     'update-db': `¿Actualizar la base de datos de ${instanceName} desde producción? Esta operación puede tardar varios minutos.`,
     'update-files': `¿Actualizar los archivos de ${instanceName} desde producción?`,
     'sync-filestore': `¿Sincronizar el filestore (imágenes y archivos) de ${instanceName} desde producción? Esto copiará todos los assets.`,
+    'regenerate-assets': `¿Regenerar los assets (CSS, JS, iconos) de ${instanceName}? El servicio se detendrá temporalmente.`,
     delete: `¿Estás seguro de eliminar la instancia ${instanceName}? Esta acción no se puede deshacer y se perderán todos los datos.`
   };
   return messages[action] || '¿Deseas continuar con esta acción?';
@@ -567,6 +571,15 @@ function InstanceCard({ instance, onAction, onViewLogs, actionLoading, isProduct
             >
               <FolderSync className="w-4 h-4" />
               <span className="hidden sm:inline">Filestore</span>
+            </button>
+            <button
+              onClick={() => onAction('regenerate-assets', instance.name)}
+              disabled={actionLoading[`regenerate-assets-${instance.name}`]}
+              title="Regenerar assets (CSS, JS, iconos) de Odoo"
+              className="flex items-center gap-2 px-3 py-2 text-sm text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/20 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <Palette className="w-4 h-4" />
+              <span className="hidden sm:inline">Assets</span>
             </button>
             <button
               onClick={() => onAction('delete', instance.name)}

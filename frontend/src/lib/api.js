@@ -82,6 +82,9 @@ export const instances = {
   syncFilestore: (name) => 
     api.post(`/api/instances/${name}/sync-filestore`),
   
+  regenerateAssets: (name) => 
+    api.post(`/api/instances/${name}/regenerate-assets`),
+  
   getLogs: (name, lines = 100, type = 'systemd') => 
     api.get(`/api/instances/${name}/logs?lines=${lines}&type=${type}`),
   

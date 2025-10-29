@@ -247,7 +247,8 @@ def get_update_log(instance_name, action):
     log_files = {
         'update-db': f'/tmp/odoo-update-db-{instance_name}.log',
         'update-files': f'/tmp/odoo-update-files-{instance_name}.log',
-        'sync-filestore': f'/tmp/odoo-sync-filestore-{instance_name}.log'
+        'sync-filestore': f'/tmp/odoo-sync-filestore-{instance_name}.log',
+        'regenerate-assets': f'/tmp/odoo-regenerate-assets-{instance_name}.log'
     }
     
     log_file = log_files.get(action)
@@ -293,4 +294,35 @@ def sync_instance_filestore(instance_name):
             return jsonify(result), 500
     except Exception as e:
         log_action(user_id, 'sync_filestore', instance_name, str(e), 'error')
+        return jsonify({'error': str(e)}), 500
+
+@instances_bp.route('/<instance_name>/regenerate-assets', methods=['POST'])
+@jwt_required()
+def regenerate_instance_assets(instance_name):
+    """Regenera los assets de una instancia"""
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    # Verificar permisos
+    if user.role not in ['admin', 'developer']:
+        return jsonify({'error': 'Permisos insuficientes'}), 403
+    
+    try:
+        result = manager.regenerate_assets(instance_name)
+        
+        # Log
+        log_action(
+            user_id,
+            'regenerate_assets',
+            instance_name,
+            result.get('message') or result.get('error'),
+            'success' if result['success'] else 'error'
+        )
+        
+        if result['success']:
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+    except Exception as e:
+        log_action(user_id, 'regenerate_assets', instance_name, str(e), 'error')
         return jsonify({'error': str(e)}), 500
