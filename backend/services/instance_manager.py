@@ -272,27 +272,113 @@ class InstanceManager:
         except Exception as e:
             return {'success': False, 'error': str(e)}
     
-    def get_instance_logs(self, instance_name, lines=100):
-        """Obtiene los logs de una instancia"""
+    def get_instance_logs(self, instance_name, lines=100, log_type='systemd'):
+        """Obtiene los logs de una instancia según el tipo especificado"""
         instances = self.list_instances()
         instance = next((i for i in instances if i['name'] == instance_name), None)
         
-        if not instance or not instance['service']:
-            return {'success': False, 'error': 'Instancia o servicio no encontrado'}
+        if not instance:
+            return {'success': False, 'error': 'Instancia no encontrada'}
         
         try:
-            result = subprocess.run(
-                ['/usr/bin/journalctl', '-u', instance['service'], '-n', str(lines), '--no-pager'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+            if log_type == 'systemd':
+                # Logs de systemd journal
+                if not instance['service']:
+                    return {'success': False, 'error': 'Servicio no encontrado'}
+                
+                result = subprocess.run(
+                    ['/usr/bin/journalctl', '-u', instance['service'], '-n', str(lines), '--no-pager'],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                return {
+                    'success': True,
+                    'logs': result.stdout,
+                    'lines': lines,
+                    'type': 'systemd'
+                }
             
-            return {
-                'success': True,
-                'logs': result.stdout,
-                'lines': lines
-            }
+            elif log_type == 'odoo':
+                # Log file de Odoo
+                log_file = os.path.join(instance['path'], 'odoo.log')
+                if not os.path.exists(log_file):
+                    return {'success': False, 'error': 'Archivo odoo.log no encontrado'}
+                
+                result = subprocess.run(
+                    ['/usr/bin/tail', '-n', str(lines), log_file],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if result.returncode != 0:
+                    return {'success': False, 'error': f'Error al leer log: {result.stderr}'}
+                
+                return {
+                    'success': True,
+                    'logs': result.stdout if result.stdout else 'No hay logs disponibles',
+                    'lines': lines,
+                    'type': 'odoo'
+                }
+            
+            elif log_type == 'nginx-access':
+                # Logs de acceso de Nginx filtrados por dominio
+                if not instance['domain']:
+                    return {'success': False, 'error': 'Dominio no encontrado'}
+                
+                result = subprocess.run(
+                    f"/usr/bin/grep '{instance['domain']}' /var/log/nginx/access.log | /usr/bin/tail -n {lines}",
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if result.returncode == 0 and result.stdout:
+                    logs_text = result.stdout
+                elif result.returncode == 1:  # grep no encontró coincidencias
+                    logs_text = f'No hay logs de acceso para el dominio {instance["domain"]}'
+                else:
+                    logs_text = f'Error al leer logs: {result.stderr}'
+                
+                return {
+                    'success': True,
+                    'logs': logs_text,
+                    'lines': lines,
+                    'type': 'nginx-access'
+                }
+            
+            elif log_type == 'nginx-error':
+                # Logs de error de Nginx filtrados por dominio
+                if not instance['domain']:
+                    return {'success': False, 'error': 'Dominio no encontrado'}
+                
+                result = subprocess.run(
+                    f"/usr/bin/grep '{instance['domain']}' /var/log/nginx/error.log | /usr/bin/tail -n {lines}",
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if result.returncode == 0 and result.stdout:
+                    logs_text = result.stdout
+                elif result.returncode == 1:  # grep no encontró coincidencias
+                    logs_text = f'No hay logs de error para el dominio {instance["domain"]}'
+                else:
+                    logs_text = f'Error al leer logs: {result.stderr}'
+                
+                return {
+                    'success': True,
+                    'logs': logs_text,
+                    'lines': lines,
+                    'type': 'nginx-error'
+                }
+            
+            else:
+                return {'success': False, 'error': f'Tipo de log no válido: {log_type}'}
+                
         except Exception as e:
             return {'success': False, 'error': str(e)}
     
@@ -311,5 +397,35 @@ class InstanceManager:
                 timeout=30
             )
             return {'success': True, 'message': f'Instancia {instance_name} reiniciada'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def sync_filestore(self, instance_name):
+        """Sincroniza el filestore de una instancia de desarrollo desde producción"""
+        self._init_paths()
+        instance_path = os.path.join(self.dev_root, instance_name)
+        script_path = os.path.join(instance_path, 'sync-filestore.sh')
+        
+        if not os.path.exists(script_path):
+            return {'success': False, 'error': 'Script sync-filestore.sh no encontrado'}
+        
+        try:
+            # Ejecutar script en background con log
+            cmd = f"echo 's' | /bin/bash {script_path} > /tmp/odoo-sync-filestore-{instance_name}.log 2>&1 &"
+            subprocess.Popen(
+                cmd,
+                shell=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+                cwd=instance_path
+            )
+            
+            return {
+                'success': True,
+                'message': f'Sincronización de filestore iniciada. Ver logs: /tmp/odoo-sync-filestore-{instance_name}.log',
+                'log_file': f'/tmp/odoo-sync-filestore-{instance_name}.log'
+            }
         except Exception as e:
             return {'success': False, 'error': str(e)}

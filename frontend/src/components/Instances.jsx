@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { instances } from '../lib/api';
-import { Server, Play, Square, Trash2, RefreshCw, Database, FileText, Plus, Eye, AlertCircle } from 'lucide-react';
+import { Server, Play, Square, Trash2, RefreshCw, Database, FileText, Plus, Eye, AlertCircle, FolderSync } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import Toast from './Toast';
 
@@ -12,10 +12,12 @@ export default function Instances() {
   const [newInstanceName, setNewInstanceName] = useState('');
   const [selectedInstance, setSelectedInstance] = useState(null);
   const [logs, setLogs] = useState('');
+  const [activeLogTab, setActiveLogTab] = useState('systemd');
+  const [logsLoading, setLogsLoading] = useState(false);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, action: null, instanceName: null });
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [creationLog, setCreationLog] = useState({ show: false, instanceName: '', log: '' });
-  const [updateLog, setUpdateLog] = useState({ show: false, instanceName: '', action: '', log: '' });
+  const [updateLog, setUpdateLog] = useState({ show: false, instanceName: '', action: '', log: '', completed: false });
   const [restartModal, setRestartModal] = useState({ show: false, instanceName: '', status: 'Reiniciando...' });
 
   useEffect(() => {
@@ -45,29 +47,35 @@ export default function Instances() {
     try {
       let response;
       
-      // Para update-db y update-files, mostrar modal con log
-      if (action === 'update-db' || action === 'update-files') {
+      // Para update-db, update-files y sync-filestore, mostrar modal con log
+      if (action === 'update-db' || action === 'update-files' || action === 'sync-filestore') {
         response = action === 'update-db' 
           ? await instances.updateDb(instanceName)
-          : await instances.updateFiles(instanceName);
+          : action === 'update-files'
+          ? await instances.updateFiles(instanceName)
+          : await instances.syncFilestore(instanceName);
         
         if (response.data.success) {
-          setUpdateLog({ show: true, instanceName, action, log: 'Iniciando actualizaci\u00f3n...\n' });
+          setUpdateLog({ show: true, instanceName, action, log: 'Iniciando actualizaci\u00f3n...\n', completed: false });
           
           // Polling del log cada 2 segundos
           const logInterval = setInterval(async () => {
             try {
               const logResponse = await instances.getUpdateLog(instanceName, action);
-              setUpdateLog(prev => ({ ...prev, log: logResponse.data.log || 'Esperando...' }));
               
               // Si el log contiene "\u2705" significa que termin\u00f3
-              if (logResponse.data.log && logResponse.data.log.includes('\u2705')) {
+              const isCompleted = logResponse.data.log && logResponse.data.log.includes('\u2705');
+              
+              setUpdateLog(prev => ({ 
+                ...prev, 
+                log: logResponse.data.log || 'Esperando...', 
+                completed: isCompleted 
+              }));
+              
+              if (isCompleted) {
                 clearInterval(logInterval);
-                setTimeout(() => {
-                  setUpdateLog({ show: false, instanceName: '', action: '', log: '' });
-                  setToast({ show: true, message: 'Actualizaci\u00f3n completada', type: 'success' });
-                  fetchInstances();
-                }, 3000);
+                setToast({ show: true, message: 'Actualizaci\u00f3n completada', type: 'success' });
+                fetchInstances();
               }
             } catch (err) {
               console.error('Error fetching log:', err);
@@ -156,14 +164,24 @@ export default function Instances() {
     }
   };
 
-  const handleViewLogs = async (instanceName) => {
+  const handleViewLogs = async (instanceName, logType = 'systemd') => {
     setSelectedInstance(instanceName);
+    setActiveLogTab(logType);
+    setLogsLoading(true);
     setLogs('Cargando logs...');
     try {
-      const response = await instances.getLogs(instanceName, 200);
+      const response = await instances.getLogs(instanceName, 200, logType);
       setLogs(response.data.logs);
     } catch (error) {
       setLogs('Error al cargar logs: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  const handleLogTabChange = (logType) => {
+    if (selectedInstance) {
+      handleViewLogs(selectedInstance, logType);
     }
   };
 
@@ -273,7 +291,7 @@ export default function Instances() {
               </button>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg transition-colors"
+                className="flex-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg transition-colors"
               >
                 Cancelar
               </button>
@@ -307,20 +325,28 @@ export default function Instances() {
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[80vh] flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                {updateLog.action === 'update-db' ? 'Actualizando Base de Datos' : 'Actualizando Archivos'}: {updateLog.instanceName}
+                {updateLog.action === 'update-db' ? 'Actualizando Base de Datos' : updateLog.action === 'update-files' ? 'Actualizando Archivos' : 'Sincronizando Filestore'}: {updateLog.instanceName}
               </h3>
               <button
-                onClick={() => setUpdateLog({ show: false, instanceName: '', action: '', log: '' })}
-                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300"
+                onClick={() => setUpdateLog({ show: false, instanceName: '', action: '', log: '', completed: false })}
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
               >
                 ✕
               </button>
             </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-              <p className="text-sm text-blue-800">
-                ⏳ La actualización puede tardar varios minutos. El log se actualiza automáticamente.
-              </p>
-            </div>
+            {!updateLog.completed ? (
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 mb-4">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  ⏳ La actualización puede tardar varios minutos. El log se actualiza automáticamente.
+                </p>
+              </div>
+            ) : (
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg p-3 mb-4">
+                <p className="text-sm text-green-800 dark:text-green-200">
+                  ✅ Actualización completada. Puedes cerrar este modal.
+                </p>
+              </div>
+            )}
             <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto flex-1 text-sm font-mono whitespace-pre-wrap">
               {updateLog.log}
             </pre>
@@ -361,14 +387,68 @@ export default function Instances() {
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Logs: {selectedInstance}</h3>
               <button
                 onClick={() => setSelectedInstance(null)}
-                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300"
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
               >
                 ✕
               </button>
             </div>
-            <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto flex-1 text-sm font-mono">
-              {logs}
-            </pre>
+            
+            {/* Pestañas de logs */}
+            <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => handleLogTabChange('systemd')}
+                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                  activeLogTab === 'systemd'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                }`}
+              >
+                Systemd Journal
+              </button>
+              <button
+                onClick={() => handleLogTabChange('odoo')}
+                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                  activeLogTab === 'odoo'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                }`}
+              >
+                Odoo Log
+              </button>
+              <button
+                onClick={() => handleLogTabChange('nginx-access')}
+                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                  activeLogTab === 'nginx-access'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                }`}
+              >
+                Nginx Access
+              </button>
+              <button
+                onClick={() => handleLogTabChange('nginx-error')}
+                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                  activeLogTab === 'nginx-error'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                }`}
+              >
+                Nginx Error
+              </button>
+            </div>
+            
+            {/* Contenido del log */}
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {logsLoading ? (
+                <div className="flex items-center justify-center flex-1">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : (
+                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto flex-1 text-sm font-mono">
+                  {logs}
+                </pre>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -402,6 +482,7 @@ function getConfirmTitle(action) {
     restart: 'Reiniciar Instancia',
     'update-db': 'Actualizar Base de Datos',
     'update-files': 'Actualizar Archivos',
+    'sync-filestore': 'Sincronizar Filestore',
     delete: 'Eliminar Instancia'
   };
   return titles[action] || 'Confirmar Acción';
@@ -412,6 +493,7 @@ function getConfirmMessage(action, instanceName) {
     restart: `¿Deseas reiniciar la instancia ${instanceName}? El servicio se detendrá temporalmente.`,
     'update-db': `¿Actualizar la base de datos de ${instanceName} desde producción? Esta operación puede tardar varios minutos.`,
     'update-files': `¿Actualizar los archivos de ${instanceName} desde producción?`,
+    'sync-filestore': `¿Sincronizar el filestore (imágenes y archivos) de ${instanceName} desde producción? Esto copiará todos los assets.`,
     delete: `¿Estás seguro de eliminar la instancia ${instanceName}? Esta acción no se puede deshacer y se perderán todos los datos.`
   };
   return messages[action] || '¿Deseas continuar con esta acción?';
@@ -450,6 +532,7 @@ function InstanceCard({ instance, onAction, onViewLogs, actionLoading, isProduct
         <button
           onClick={() => onAction('restart', instance.name)}
           disabled={actionLoading[`restart-${instance.name}`]}
+          title="Reiniciar el servicio Odoo de esta instancia"
           className="flex items-center gap-2 px-3 py-2 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${actionLoading[`restart-${instance.name}`] ? 'animate-spin' : ''}`} />
@@ -461,6 +544,7 @@ function InstanceCard({ instance, onAction, onViewLogs, actionLoading, isProduct
             <button
               onClick={() => onAction('update-db', instance.name)}
               disabled={actionLoading[`update-db-${instance.name}`]}
+              title="Actualizar la base de datos desde producción (incluye filestore)"
               className="flex items-center gap-2 px-3 py-2 text-sm text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors disabled:opacity-50"
             >
               <Database className="w-4 h-4" />
@@ -469,14 +553,25 @@ function InstanceCard({ instance, onAction, onViewLogs, actionLoading, isProduct
             <button
               onClick={() => onAction('update-files', instance.name)}
               disabled={actionLoading[`update-files-${instance.name}`]}
+              title="Actualizar el código fuente de Odoo desde producción"
               className="flex items-center gap-2 px-3 py-2 text-sm text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors disabled:opacity-50"
             >
               <FileText className="w-4 h-4" />
               <span className="hidden sm:inline">Archivos</span>
             </button>
             <button
+              onClick={() => onAction('sync-filestore', instance.name)}
+              disabled={actionLoading[`sync-filestore-${instance.name}`]}
+              title="Sincronizar solo el filestore (imágenes, PDFs, assets) desde producción"
+              className="flex items-center gap-2 px-3 py-2 text-sm text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <FolderSync className="w-4 h-4" />
+              <span className="hidden sm:inline">Filestore</span>
+            </button>
+            <button
               onClick={() => onAction('delete', instance.name)}
               disabled={actionLoading[`delete-${instance.name}`]}
+              title="Eliminar permanentemente esta instancia de desarrollo"
               className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4" />
@@ -487,6 +582,7 @@ function InstanceCard({ instance, onAction, onViewLogs, actionLoading, isProduct
         
         <button
           onClick={() => onViewLogs(instance.name)}
+          title="Ver los logs del servicio systemd"
           className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
         >
           <Eye className="w-4 h-4" />

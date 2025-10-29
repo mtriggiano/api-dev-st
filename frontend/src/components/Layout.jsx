@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Server, FileText, LogOut, Menu, X, Moon, Sun, Database } from 'lucide-react';
+import { LayoutDashboard, Server, FileText, LogOut, Menu, X, Moon, Sun } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 export default function Layout({ children }) {
@@ -20,7 +20,6 @@ export default function Layout({ children }) {
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Instancias', href: '/instances', icon: Server },
     { name: 'Logs', href: '/logs', icon: FileText },
-    { name: 'Backups', href: '/backups', icon: Database },
   ];
 
   return (

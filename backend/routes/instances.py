@@ -178,9 +178,10 @@ def get_instance_logs(instance_name):
     """Obtiene los logs de una instancia"""
     lines = request.args.get('lines', default=100, type=int)
     lines = min(lines, 1000)  # Máximo 1000 líneas
+    log_type = request.args.get('type', default='systemd', type=str)
     
     try:
-        result = manager.get_instance_logs(instance_name, lines)
+        result = manager.get_instance_logs(instance_name, lines, log_type)
         if result['success']:
             return jsonify(result), 200
         else:
@@ -245,7 +246,8 @@ def get_update_log(instance_name, action):
     
     log_files = {
         'update-db': f'/tmp/odoo-update-db-{instance_name}.log',
-        'update-files': f'/tmp/odoo-update-files-{instance_name}.log'
+        'update-files': f'/tmp/odoo-update-files-{instance_name}.log',
+        'sync-filestore': f'/tmp/odoo-sync-filestore-{instance_name}.log'
     }
     
     log_file = log_files.get(action)
@@ -260,4 +262,35 @@ def get_update_log(instance_name, action):
             content = f.read()
         return jsonify({'log': content, 'exists': True}), 200
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@instances_bp.route('/<instance_name>/sync-filestore', methods=['POST'])
+@jwt_required()
+def sync_instance_filestore(instance_name):
+    """Sincroniza el filestore de una instancia"""
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    # Verificar permisos
+    if user.role not in ['admin', 'developer']:
+        return jsonify({'error': 'Permisos insuficientes'}), 403
+    
+    try:
+        result = manager.sync_filestore(instance_name)
+        
+        # Log
+        log_action(
+            user_id,
+            'sync_filestore',
+            instance_name,
+            result.get('message') or result.get('error'),
+            'success' if result['success'] else 'error'
+        )
+        
+        if result['success']:
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+    except Exception as e:
+        log_action(user_id, 'sync_filestore', instance_name, str(e), 'error')
         return jsonify({'error': str(e)}), 500

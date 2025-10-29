@@ -79,8 +79,11 @@ export const instances = {
   updateFiles: (name) => 
     api.post(`/api/instances/${name}/update-files`),
   
-  getLogs: (name, lines = 100) => 
-    api.get(`/api/instances/${name}/logs?lines=${lines}`),
+  syncFilestore: (name) => 
+    api.post(`/api/instances/${name}/sync-filestore`),
+  
+  getLogs: (name, lines = 100, type = 'systemd') => 
+    api.get(`/api/instances/${name}/logs?lines=${lines}&type=${type}`),
   
   restart: (name) => 
     api.post(`/api/instances/${name}/restart`),
