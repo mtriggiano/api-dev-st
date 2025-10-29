@@ -277,12 +277,12 @@ export default function Instances() {
               value={newInstanceName}
               onChange={(e) => setNewInstanceName(e.target.value)}
               placeholder="Nombre (ej: juan, testing, feature-xyz)"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-4"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
             />
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-              <p className="text-sm text-yellow-800">
-                <AlertCircle className="w-4 h-4 inline mr-1" />
-                La creación puede tardar varios minutos. Se clonará desde producción.
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3 mb-4">
+              <p className="text-sm text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>La creación puede tardar varios minutos. Se clonará desde producción y se neutralizará automáticamente.</span>
               </p>
             </div>
             <div className="flex gap-3">
