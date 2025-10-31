@@ -53,7 +53,7 @@ sudo journalctl -u odoo19e-NOMBRE -f
 ./scripts/odoo/remove-dev-instance.sh
 
 # Listar instancias
-ls -la /home/go/apps/develop/odoo-enterprise/
+ls -la /home/go/apps/develop/odoo/
 ```
 
 ### Backups
@@ -116,8 +116,8 @@ sudo tail -f /var/log/nginx/error.log
 /home/go/api-dev/scripts/utils/
 
 # Instancias Odoo
-/home/go/apps/production/odoo-enterprise/
-/home/go/apps/develop/odoo-enterprise/
+/home/go/apps/production/odoo/
+/home/go/apps/develop/odoo/
 
 # Backups
 /home/go/backups/

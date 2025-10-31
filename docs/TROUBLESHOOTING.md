@@ -212,8 +212,8 @@ Las rutas en `config.py` no coinciden con la estructura real
 cat /home/go/api/backend/.env
 
 # Verificar que existan:
-ls -la /home/go/apps/production/odoo-enterprise/
-ls -la /home/go/apps/develop/odoo-enterprise/
+ls -la /home/go/apps/production/odoo/
+ls -la /home/go/apps/develop/odoo/
 ```
 
 ---

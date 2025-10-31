@@ -40,7 +40,7 @@ El sistema hará automáticamente:
 2. ✅ **Crear configuración** en la base de datos con:
    - Repositorio: `mtriggiano/imac-dev`
    - Rama: `dev-mtg` (se crea automáticamente con el nombre de tu instancia)
-   - Ruta local: `/home/go/apps/develop/odoo-enterprise/dev-mtg/custom_addons`
+   - Ruta local: `/home/go/apps/develop/odoo/dev-mtg/custom_addons`
 3. ✅ **Inicializar** el repositorio Git en la carpeta
 4. ✅ **Conectar** el remoto con GitHub
 5. ✅ **Crear rama** `dev-mtg` si no existe
@@ -54,7 +54,7 @@ Una vez completado, verás un mensaje de éxito. Puedes verificar que todo funci
 ssh usuario@servidor
 
 # Ir a la carpeta de custom_addons
-cd /home/go/apps/develop/odoo-enterprise/dev-mtg/custom_addons
+cd /home/go/apps/develop/odoo/dev-mtg/custom_addons
 
 # Verificar que Git esté inicializado
 git status
@@ -73,7 +73,7 @@ Una vez conectado, puedes usar Git normalmente:
 ### Desde la Terminal del Servidor
 
 ```bash
-cd /home/go/apps/develop/odoo-enterprise/dev-mtg/custom_addons
+cd /home/go/apps/develop/odoo/dev-mtg/custom_addons
 
 # Ver cambios
 git status
@@ -177,7 +177,7 @@ Si ya has conectado GitHub anteriormente:
 
 - Verifica que la instancia `dev-mtg` esté creada
 - Confirma que la carpeta `custom_addons` exista
-- Ruta esperada: `/home/go/apps/develop/odoo-enterprise/dev-mtg/custom_addons`
+- Ruta esperada: `/home/go/apps/develop/odoo/dev-mtg/custom_addons`
 
 ### El modal no se abre
 

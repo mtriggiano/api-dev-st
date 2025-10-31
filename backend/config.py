@@ -23,8 +23,8 @@ class Config:
     
     # Server paths - Actualizados para nueva estructura
     PROJECT_ROOT = os.getenv('PROJECT_ROOT', '/home/go/api-dev')
-    PROD_ROOT = os.getenv('PROD_ROOT', '/home/go/apps/production/odoo-enterprise')
-    DEV_ROOT = os.getenv('DEV_ROOT', '/home/go/apps/develop/odoo-enterprise')
+    PROD_ROOT = os.getenv('PROD_ROOT', '/home/go/apps/production/odoo')
+    DEV_ROOT = os.getenv('DEV_ROOT', '/home/go/apps/develop/odoo')
     SCRIPTS_PATH = os.getenv('SCRIPTS_PATH', f'{PROJECT_ROOT}/scripts')
     DATA_PATH = os.getenv('DATA_PATH', f'{PROJECT_ROOT}/data')
     PUERTOS_FILE = os.getenv('PUERTOS_FILE', f'{DATA_PATH}/puertos_ocupados_odoo.txt')

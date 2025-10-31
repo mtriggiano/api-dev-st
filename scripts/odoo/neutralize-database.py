@@ -8,7 +8,7 @@ import sys
 import os
 
 # Obtener configuración desde variables de entorno
-PROD_ROOT = os.environ.get('PROD_ROOT', '/home/go/apps/production/odoo-enterprise')
+PROD_ROOT = os.environ.get('PROD_ROOT', '/home/go/apps/production/odoo')
 PROD_INSTANCE = os.environ.get('PROD_INSTANCE_NAME', 'odoo-production')
 
 # Agregar el path de Odoo al PYTHONPATH

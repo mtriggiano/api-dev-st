@@ -129,8 +129,8 @@ source scripts/utils/validate-env.sh --full
 ./scripts/odoo/backup-production.sh
 
 # Listar instancias
-ls /home/go/apps/production/odoo-enterprise/
-ls /home/go/apps/develop/odoo-enterprise/
+ls /home/go/apps/production/odoo/
+ls /home/go/apps/develop/odoo/
 ```
 
 ## ⚠️ Consideraciones Importantes

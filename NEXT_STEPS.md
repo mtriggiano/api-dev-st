@@ -114,7 +114,7 @@ nano /home/go/api-dev/.env
 ./scripts/odoo/init-production.sh production
 
 # Esto creará:
-# - Instancia: /home/go/apps/production/odoo-enterprise/go/
+# - Instancia: /home/go/apps/production/odoo/go/
 # - Base de datos: go
 # - Dominio: grupoorange.ar (dominio raíz)
 ```
@@ -126,7 +126,7 @@ nano /home/go/api-dev/.env
 ./scripts/odoo/init-production.sh mi-empresa
 
 # Esto creará:
-# - Instancia: /home/go/apps/production/odoo-enterprise/mi-empresa/
+# - Instancia: /home/go/apps/production/odoo/mi-empresa/
 # - Base de datos: mi-empresa
 # - Dominio: mi-empresa.grupoorange.ar
 ```
@@ -213,10 +213,10 @@ curl -I https://grupoorange.ar  # Después de crear producción
 grep -v "PASSWORD\|TOKEN\|SECRET" /home/go/api-dev/.env
 
 # Ver instancias de producción
-ls -la /home/go/apps/production/odoo-enterprise/
+ls -la /home/go/apps/production/odoo/
 
 # Ver instancias de desarrollo
-ls -la /home/go/apps/develop/odoo-enterprise/
+ls -la /home/go/apps/develop/odoo/
 
 # Ver backups
 ls -lh /home/go/backups/

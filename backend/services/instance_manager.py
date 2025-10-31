@@ -152,23 +152,26 @@ class InstanceManager:
     def create_dev_instance(self, name):
         """Crea una nueva instancia de desarrollo"""
         self._init_paths()
-        script_path = os.path.join(self.scripts_path, 'create-dev-instance.sh')
+        script_path = os.path.join(self.scripts_path, 'odoo/create-dev-instance.sh')
         
         if not os.path.exists(script_path):
             return {'success': False, 'error': 'Script de creación no encontrado'}
         
         try:
             # Ejecutar script en background desacoplado del proceso padre
-            cmd = f"echo 's' | /bin/bash {script_path} {name} > /tmp/odoo-create-dev-{name}.log 2>&1 &"
-            logger.info(f"Executing command: {cmd}")
-            subprocess.Popen(
-                cmd,
-                shell=True,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True
-            )
+            with open(f'/tmp/odoo-create-dev-{name}.log', 'w') as log_file:
+                process = subprocess.Popen(
+                    ['/bin/bash', script_path, name],
+                    stdin=subprocess.PIPE,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    text=True
+                )
+                # Enviar confirmación
+                process.stdin.write('s\n')
+                process.stdin.close()
+            logger.info(f"Process started for instance {name}")
             logger.info(f"Process started for instance {name}")
             
             return {
@@ -182,7 +185,7 @@ class InstanceManager:
     def delete_instance(self, instance_name):
         """Elimina una instancia de desarrollo"""
         self._init_paths()
-        script_path = os.path.join(self.scripts_path, 'remove-dev-instance.sh')
+        script_path = os.path.join(self.scripts_path, 'odoo/remove-dev-instance.sh')
         
         if not os.path.exists(script_path):
             return {'success': False, 'error': 'Script de eliminación no encontrado'}
@@ -224,16 +227,19 @@ class InstanceManager:
         try:
             # Responder automáticamente: s para continuar, s/n para neutralizar
             neutralize_answer = 's' if neutralize else 'n'
-            cmd = f"echo -e 's\\n{neutralize_answer}' | /bin/bash {script_path} > /tmp/odoo-update-db-{instance_name}.log 2>&1 &"
-            subprocess.Popen(
-                cmd,
-                shell=True,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-                cwd=instance_path
-            )
+            with open(f'/tmp/odoo-update-db-{instance_name}.log', 'w') as log_file:
+                process = subprocess.Popen(
+                    ['/bin/bash', script_path],
+                    stdin=subprocess.PIPE,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    cwd=instance_path,
+                    text=True
+                )
+                # Enviar confirmación para continuar y para neutralizar
+                process.stdin.write(f's\n{neutralize_answer}\n')
+                process.stdin.close()
             
             neutralize_msg = " (con neutralización)" if neutralize else " (sin neutralización)"
             return {
@@ -256,16 +262,19 @@ class InstanceManager:
         
         try:
             # Ejecutar script en background con log
-            cmd = f"echo 's' | /bin/bash {script_path} > /tmp/odoo-update-files-{instance_name}.log 2>&1 &"
-            subprocess.Popen(
-                cmd,
-                shell=True,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-                cwd=instance_path
-            )
+            with open(f'/tmp/odoo-update-files-{instance_name}.log', 'w') as log_file:
+                process = subprocess.Popen(
+                    ['/bin/bash', script_path],
+                    stdin=subprocess.PIPE,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    cwd=instance_path,
+                    text=True
+                )
+                # Enviar confirmación
+                process.stdin.write('s\n')
+                process.stdin.close()
             
             return {
                 'success': True,
@@ -414,16 +423,19 @@ class InstanceManager:
         
         try:
             # Ejecutar script en background con log
-            cmd = f"echo 's' | /bin/bash {script_path} > /tmp/odoo-sync-filestore-{instance_name}.log 2>&1 &"
-            subprocess.Popen(
-                cmd,
-                shell=True,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-                cwd=instance_path
-            )
+            with open(f'/tmp/odoo-sync-filestore-{instance_name}.log', 'w') as log_file:
+                process = subprocess.Popen(
+                    ['/bin/bash', script_path],
+                    stdin=subprocess.PIPE,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    cwd=instance_path,
+                    text=True
+                )
+                # Enviar confirmación
+                process.stdin.write('s\n')
+                process.stdin.close()
             
             return {
                 'success': True,
@@ -444,16 +456,19 @@ class InstanceManager:
         
         try:
             # Ejecutar script en background con log
-            cmd = f"echo 's' | /bin/bash {script_path} > /tmp/odoo-regenerate-assets-{instance_name}.log 2>&1 &"
-            subprocess.Popen(
-                cmd,
-                shell=True,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-                cwd=instance_path
-            )
+            with open(f'/tmp/odoo-regenerate-assets-{instance_name}.log', 'w') as log_file:
+                process = subprocess.Popen(
+                    ['/bin/bash', script_path],
+                    stdin=subprocess.PIPE,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    cwd=instance_path,
+                    text=True
+                )
+                # Enviar confirmación
+                process.stdin.write('s\n')
+                process.stdin.close()
             
             return {
                 'success': True,

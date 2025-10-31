@@ -89,7 +89,9 @@ echo "   Base de datos: $DB_NAME"
 echo "   Dominio: https://$DOMAIN"
 echo "   Ubicación: $BASE_DIR"
 echo ""
-read -p "¿Continuar? (s/n): " CONFIRM
+
+# Leer confirmación
+read CONFIRM
 
 if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
   echo "❌ Cancelado."
@@ -356,14 +358,16 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 #!/bin/bash
 # Script para actualizar la BD de desarrollo desde producción
 
-PROD_DB="imac-production"
+PROD_DB="__PROD_INSTANCE_NAME__"
 DEV_DB="__DB_NAME__"
 INSTANCE_NAME="__INSTANCE_NAME__"
 
 echo "🔄 Actualizando base de datos de desarrollo desde producción..."
 echo "   Producción: $PROD_DB"
 echo "   Desarrollo: $DEV_DB"
-read -p "¿Continuar? Esto eliminará todos los datos actuales (s/n): " CONFIRM
+
+# Leer confirmación
+read CONFIRM
 
 if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
   echo "❌ Cancelado."
@@ -395,6 +399,24 @@ if [[ -d "$PROD_FILESTORE" ]]; then
   echo "✅ Filestore sincronizado ($(find $DEV_FILESTORE -type f | wc -l) archivos)"
 fi
 
+# Preguntar si neutralizar
+echo ""
+echo "🔒 ¿Neutralizar base de datos? (s/n):"
+read NEUTRALIZE
+
+if [[ "$NEUTRALIZE" == "s" ]] || [[ "$NEUTRALIZE" == "S" ]]; then
+  echo "🔒 Neutralizando base de datos..."
+  NEUTRALIZE_SCRIPT="/home/go/api-dev/scripts/odoo/neutralize-database.py"
+  if [[ -f "$NEUTRALIZE_SCRIPT" ]]; then
+    cd "__BASE_DIR__"
+    source venv/bin/activate
+    python3 "$NEUTRALIZE_SCRIPT" "$DEV_DB"
+    echo "✅ Base de datos neutralizada"
+  else
+    echo "⚠️  Script de neutralización no encontrado"
+  fi
+fi
+
 echo "🎨 Regenerando assets..."
 cd "__BASE_DIR__"
 source venv/bin/activate
@@ -408,6 +430,7 @@ UPDATEDB
 
 sed -i "s/__DB_NAME__/$DB_NAME/g" "$BASE_DIR/update-db.sh"
 sed -i "s/__INSTANCE_NAME__/$INSTANCE_NAME/g" "$BASE_DIR/update-db.sh"
+sed -i "s/__PROD_INSTANCE_NAME__/$PROD_INSTANCE/g" "$BASE_DIR/update-db.sh"
 sed -i "s|__BASE_DIR__|$BASE_DIR|g" "$BASE_DIR/update-db.sh"
 chmod +x "$BASE_DIR/update-db.sh"
 
@@ -424,7 +447,9 @@ INSTANCE_NAME="__INSTANCE_NAME__"
 echo "🔄 Actualizando archivos desde producción..."
 echo "   Producción: $PROD_DIR"
 echo "   Desarrollo: $DEV_DIR"
-read -p "¿Continuar? (s/n): " CONFIRM
+
+# Leer confirmación
+read CONFIRM
 
 if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
   echo "❌ Cancelado."
@@ -468,6 +493,94 @@ sed -i "s|__BASE_DIR__|$BASE_DIR|g" "$BASE_DIR/update-files.sh"
 sed -i "s/__INSTANCE_NAME__/$INSTANCE_NAME/g" "$BASE_DIR/update-files.sh"
 chmod +x "$BASE_DIR/update-files.sh"
 
+# Script para sincronizar filestore
+cat > "$BASE_DIR/sync-filestore.sh" <<'SYNCFILESTORE'
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+#!/bin/bash
+# Script para sincronizar filestore desde producción
+
+PROD_DB="__PROD_INSTANCE_NAME__"
+DEV_DB="__DB_NAME__"
+INSTANCE_NAME="__INSTANCE_NAME__"
+
+echo "📁 Sincronizando filestore desde producción..."
+echo "   Producción: $PROD_DB"
+echo "   Desarrollo: $DEV_DB"
+
+# Leer confirmación
+read CONFIRM
+
+if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+  echo "❌ Cancelado."
+  exit 1
+fi
+
+echo "⏹️  Deteniendo servicio Odoo..."
+sudo systemctl stop "odoo19e-$INSTANCE_NAME"
+
+echo "📁 Sincronizando filestore..."
+FILESTORE_BASE="/home/go/.local/share/Odoo/filestore"
+PROD_FILESTORE="$FILESTORE_BASE/$PROD_DB"
+DEV_FILESTORE="$FILESTORE_BASE/$DEV_DB"
+
+if [[ -d "$PROD_FILESTORE" ]]; then
+  mkdir -p "$DEV_FILESTORE"
+  rsync -a --delete "$PROD_FILESTORE/" "$DEV_FILESTORE/"
+  FILE_COUNT=$(find "$DEV_FILESTORE" -type f | wc -l)
+  echo "✅ Filestore sincronizado ($FILE_COUNT archivos)"
+else
+  echo "⚠️  No se encontró filestore de producción en $PROD_FILESTORE"
+fi
+
+echo "▶️  Iniciando servicio Odoo..."
+sudo systemctl start "odoo19e-$INSTANCE_NAME"
+
+echo "✅ Filestore sincronizado correctamente."
+SYNCFILESTORE
+
+sed -i "s/__DB_NAME__/$DB_NAME/g" "$BASE_DIR/sync-filestore.sh"
+sed -i "s/__INSTANCE_NAME__/$INSTANCE_NAME/g" "$BASE_DIR/sync-filestore.sh"
+sed -i "s/__PROD_INSTANCE_NAME__/$PROD_INSTANCE/g" "$BASE_DIR/sync-filestore.sh"
+chmod +x "$BASE_DIR/sync-filestore.sh"
+
+# Script para regenerar assets
+cat > "$BASE_DIR/regenerate-assets.sh" <<'REGENASSETS'
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+#!/bin/bash
+# Script para regenerar assets de Odoo
+
+INSTANCE_NAME="__INSTANCE_NAME__"
+BASE_DIR="__BASE_DIR__"
+
+echo "🎨 Regenerando assets de Odoo..."
+echo "   Instancia: $INSTANCE_NAME"
+
+# Leer confirmación
+read CONFIRM
+
+if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+  echo "❌ Cancelado."
+  exit 1
+fi
+
+echo "⏹️  Deteniendo servicio Odoo..."
+sudo systemctl stop "odoo19e-$INSTANCE_NAME"
+
+echo "🎨 Regenerando assets..."
+cd "$BASE_DIR"
+source venv/bin/activate
+./venv/bin/python3 ./odoo-server/odoo-bin -c ./odoo.conf --update=all --stop-after-init
+
+echo "▶️  Iniciando servicio Odoo..."
+sudo systemctl start "odoo19e-$INSTANCE_NAME"
+
+echo "✅ Assets regenerados correctamente."
+REGENASSETS
+
+sed -i "s/__INSTANCE_NAME__/$INSTANCE_NAME/g" "$BASE_DIR/regenerate-assets.sh"
+sed -i "s|__BASE_DIR__|$BASE_DIR|g" "$BASE_DIR/regenerate-assets.sh"
+chmod +x "$BASE_DIR/regenerate-assets.sh"
+
 # Generar archivo de información
 cat > "$INFO_FILE" <<EOF
 🔧 Instancia de Desarrollo: $INSTANCE_NAME
@@ -490,6 +603,8 @@ cat > "$INFO_FILE" <<EOF
 📜 Scripts auxiliares:
    Actualizar BD: $BASE_DIR/update-db.sh
    Actualizar archivos: $BASE_DIR/update-files.sh
+   Sincronizar filestore: $BASE_DIR/sync-filestore.sh
+   Regenerar assets: $BASE_DIR/regenerate-assets.sh
 
 🏭 Clonado desde producción:
    Instancia: $PROD_INSTANCE
@@ -511,3 +626,5 @@ echo ""
 echo "📜 Scripts disponibles:"
 echo "   Actualizar BD desde producción: $BASE_DIR/update-db.sh"
 echo "   Actualizar archivos desde producción: $BASE_DIR/update-files.sh"
+echo "   Sincronizar filestore: $BASE_DIR/sync-filestore.sh"
+echo "   Regenerar assets: $BASE_DIR/regenerate-assets.sh"

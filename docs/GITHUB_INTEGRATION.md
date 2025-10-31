@@ -35,7 +35,7 @@ Necesitas crear un Personal Access Token (PAT) en GitHub con los siguientes perm
 ### 3. Carpeta Local
 
 - Identifica la ruta de la carpeta de custom addons en tu instancia de desarrollo
-- Ejemplo: `/home/go/apps/develop/odoo-enterprise/dev-mi-instancia/custom-addons`
+- Ejemplo: `/home/go/apps/develop/odoo/dev-mi-instancia/custom-addons`
 
 ---
 
@@ -79,7 +79,7 @@ curl -X POST https://api-dev.hospitalprivadosalta.ar/api/github/config \
     "repo_owner": "tu-usuario-o-org",
     "repo_name": "nombre-del-repo",
     "repo_branch": "main",
-    "local_path": "/home/go/apps/develop/odoo-enterprise/dev-mi-instancia/custom-addons"
+    "local_path": "/home/go/apps/develop/odoo/dev-mi-instancia/custom-addons"
   }'
 ```
 

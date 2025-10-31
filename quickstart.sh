@@ -291,8 +291,8 @@ print_header "PASO 6: Configuración de Odoo"
 
 # Detectar si existe una instancia con nombre diferente
 EXISTING_INSTANCE=""
-if [ -d "/home/go/apps/production/odoo-enterprise" ]; then
-    for dir in /home/go/apps/production/odoo-enterprise/*/; do
+if [ -d "/home/go/apps/production/odoo" ]; then
+    for dir in /home/go/apps/production/odoo/*/; do
         if [ -d "$dir" ]; then
             EXISTING_INSTANCE=$(basename "$dir")
             break
@@ -344,8 +344,8 @@ fi
 
 print_header "PASO 7: Rutas del Sistema"
 
-read_with_default "Ruta de instancias de producción" "/home/go/apps/production/odoo-enterprise" PROD_ROOT
-read_with_default "Ruta de instancias de desarrollo" "/home/go/apps/develop/odoo-enterprise" DEV_ROOT
+read_with_default "Ruta de instancias de producción" "/home/go/apps/production/odoo" PROD_ROOT
+read_with_default "Ruta de instancias de desarrollo" "/home/go/apps/develop/odoo" DEV_ROOT
 read_with_default "Ruta de backups" "/home/go/backups" BACKUPS_PATH
 read_with_default "Binario de Python" "/usr/bin/python3.12" PYTHON_BIN
 
