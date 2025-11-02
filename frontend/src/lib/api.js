@@ -7,6 +7,7 @@ const API_URL = import.meta.env.MODE === 'production'
   : (import.meta.env.VITE_API_URL || 'http://localhost:5000');
 
 const api = axios.create({
+  timeout: 0, // Sin timeout para uploads grandes
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
@@ -129,6 +130,25 @@ export const backup = {
   
   getLog: () => 
     api.get('/api/backup/log'),
+  
+  restore: (filename) => 
+    api.post('/api/backup/restore', { filename, confirmed: true }),
+  
+  getRestoreLog: () => 
+    api.get('/api/backup/restore/log'),
+  
+  upload: (formData, onProgress) => {
+    return api.post('/api/backup/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress) {
+          onProgress(progressEvent);
+        }
+      },
+    });
+  },
 };
 
 export const github = {

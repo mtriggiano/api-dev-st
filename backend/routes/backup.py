@@ -4,6 +4,10 @@ from models import User, ActionLog, db
 from services.backup_manager import BackupManager
 import os
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 backup_bp = Blueprint('backup', __name__)
 manager = BackupManager()
@@ -202,4 +206,137 @@ def get_backup_log():
         result = manager.get_backup_log()
         return jsonify(result), 200
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@backup_bp.route('/restore', methods=['POST'])
+@jwt_required()
+def restore_backup():
+    """Restaura un backup de producción"""
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    # Solo admin puede restaurar
+    if user.role != 'admin':
+        return jsonify({'error': 'Permisos insuficientes'}), 403
+    
+    try:
+        data = request.get_json()
+        filename = data.get('filename')
+        
+        if not filename:
+            return jsonify({'error': 'Filename requerido'}), 400
+        
+        # Confirmar que el usuario entiende los riesgos
+        confirmed = data.get('confirmed', False)
+        if not confirmed:
+            return jsonify({'error': 'Debe confirmar la restauración'}), 400
+        
+        result = manager.restore_backup(filename)
+        
+        if result['success']:
+            log_action(
+                user_id,
+                'restore_backup',
+                'production',
+                f"Backup: {filename}",
+                'success'
+            )
+        else:
+            log_action(user_id, 'restore_backup', 'production', result.get('error'), 'error')
+        
+        return jsonify(result), 200 if result['success'] else 400
+    except Exception as e:
+        log_action(user_id, 'restore_backup', 'production', str(e), 'error')
+        return jsonify({'error': str(e)}), 500
+
+@backup_bp.route('/restore/log', methods=['GET'])
+@jwt_required()
+def get_restore_log():
+    """Obtiene el log de la última restauración"""
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    # Solo admin puede ver logs
+    if user.role != 'admin':
+        return jsonify({'error': 'Permisos insuficientes'}), 403
+    
+    try:
+        result = manager.get_restore_log()
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@backup_bp.route('/upload', methods=['POST'])
+@jwt_required()
+def upload_backup():
+    """Sube un archivo de backup"""
+    import sys
+    logger.info("=" * 80)
+    logger.info("🎯 ENDPOINT /upload LLAMADO")
+    logger.info(f"📋 Request method: {request.method}")
+    logger.info(f"📋 Request headers: {dict(request.headers)}")
+    logger.info(f"📋 Request content_type: {request.content_type}")
+    logger.info(f"📋 Request content_length: {request.content_length}")
+    logger.info(f"📋 Request files keys: {list(request.files.keys())}")
+    logger.info(f"📋 Request form keys: {list(request.form.keys())}")
+    sys.stdout.flush()
+    
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    logger.info(f"📥 Request de upload recibido de usuario {user_id} ({user.username})")
+    
+    # Solo admin puede subir backups
+    if user.role != 'admin':
+        logger.warning(f"⚠️ Usuario {user_id} sin permisos de admin intentó subir backup")
+        return jsonify({'error': 'Permisos insuficientes'}), 403
+    
+    try:
+        # Verificar que se envió un archivo
+        if 'file' not in request.files:
+            logger.error("❌ No se envió ningún archivo en el request")
+            logger.error(f"❌ Files disponibles: {list(request.files.keys())}")
+            return jsonify({'error': 'No se envió ningún archivo'}), 400
+        
+        file = request.files['file']
+        
+        logger.info(f"📄 Archivo recibido: {file.filename}")
+        logger.info(f"📊 Content-Type: {file.content_type}")
+        logger.info(f"📊 File stream: {file.stream}")
+        
+        if file.filename == '':
+            logger.error("❌ Nombre de archivo vacío")
+            return jsonify({'error': 'Nombre de archivo vacío'}), 400
+        
+        # Validar extensión
+        if not (file.filename.endswith('.tar.gz') or file.filename.endswith('.zip')):
+            logger.error(f"❌ Extensión inválida: {file.filename}")
+            return jsonify({'error': 'El archivo debe ser .tar.gz o .zip'}), 400
+        
+        logger.info("🚀 Iniciando proceso de upload...")
+        sys.stdout.flush()
+        
+        result = manager.upload_backup(file)
+        
+        logger.info(f"📊 Resultado del upload: {result}")
+        logger.info("=" * 80)
+        sys.stdout.flush()
+        
+        if result['success']:
+            log_action(
+                user_id,
+                'upload_backup',
+                'production',
+                f"Backup: {result['filename']}",
+                'success'
+            )
+        else:
+            log_action(user_id, 'upload_backup', 'production', result.get('error'), 'error')
+        
+        return jsonify(result), 200 if result['success'] else 400
+    except Exception as e:
+        logger.error(f"💥 EXCEPCIÓN EN UPLOAD: {str(e)}")
+        logger.exception("Stack trace:")
+        sys.stdout.flush()
+        log_action(user_id, 'upload_backup', 'production', str(e), 'error')
         return jsonify({'error': str(e)}), 500

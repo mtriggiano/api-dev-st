@@ -1,8 +1,9 @@
 #!/bin/bash
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# 💾 Script de backup completo de producción Odoo - Versión refactorizada
-# Crea backup de BD + filestore comprimido, SIN neutralizar
+# 💾 Script de backup completo de producción Odoo
+# Compatible con formato estándar de Odoo Online
+# Estructura: backup.tar.gz contiene dump.sql + filestore/
 
 set -e
 
@@ -27,7 +28,7 @@ TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 BACKUP_NAME="backup_${PROD_DB}_${TIMESTAMP}"
 BACKUP_PATH="$BACKUP_DIR/$BACKUP_NAME"
 
-echo "💾 Iniciando backup de producción..."
+echo "💾 Iniciando backup de producción (formato Odoo Online)..."
 echo "   Instancia: $PROD_INSTANCE"
 echo "   Base de datos: $PROD_DB"
 echo "   Timestamp: $TIMESTAMP"
@@ -36,45 +37,30 @@ echo ""
 # Crear directorio temporal para este backup
 mkdir -p "$BACKUP_PATH"
 
-# 1. Backup de la base de datos
+# 1. Backup de la base de datos (dump.sql sin comprimir, como Odoo Online)
 echo "🗄️  Creando dump de base de datos..."
-sudo -u postgres pg_dump "$PROD_DB" | gzip > "$BACKUP_PATH/database.sql.gz"
-DB_SIZE=$(du -h "$BACKUP_PATH/database.sql.gz" | cut -f1)
+sudo -u postgres pg_dump "$PROD_DB" > "$BACKUP_PATH/dump.sql"
+DB_SIZE=$(du -h "$BACKUP_PATH/dump.sql" | cut -f1)
 echo "✅ Base de datos: $DB_SIZE"
 
-# 2. Backup del filestore
+# 2. Copiar filestore (estructura de carpetas, como Odoo Online)
 if [[ -d "$PROD_FILESTORE" ]]; then
-  echo "📁 Comprimiendo filestore..."
-  tar -czf "$BACKUP_PATH/filestore.tar.gz" -C "$FILESTORE_BASE" "$PROD_DB" 2>/dev/null
-  FS_SIZE=$(du -h "$BACKUP_PATH/filestore.tar.gz" | cut -f1)
-  FILE_COUNT=$(find "$PROD_FILESTORE" -type f | wc -l)
+  echo "📁 Copiando filestore..."
+  cp -r "$PROD_FILESTORE" "$BACKUP_PATH/filestore"
+  FILE_COUNT=$(find "$BACKUP_PATH/filestore" -type f | wc -l)
+  FS_SIZE=$(du -sh "$BACKUP_PATH/filestore" | cut -f1)
   echo "✅ Filestore: $FS_SIZE ($FILE_COUNT archivos)"
 else
   echo "⚠️  No se encontró filestore en $PROD_FILESTORE"
-  touch "$BACKUP_PATH/filestore.tar.gz"
+  mkdir -p "$BACKUP_PATH/filestore"
+  FILE_COUNT=0
+  FS_SIZE="0"
 fi
 
-# 3. Crear archivo de metadatos
-echo "📝 Creando metadatos..."
-cat > "$BACKUP_PATH/metadata.json" <<EOF
-{
-  "timestamp": "$TIMESTAMP",
-  "date": "$(date '+%Y-%m-%d %H:%M:%S')",
-  "database": "$PROD_DB",
-  "instance": "$PROD_INSTANCE",
-  "database_size": "$DB_SIZE",
-  "filestore_size": "$FS_SIZE",
-  "file_count": ${FILE_COUNT:-0},
-  "hostname": "$(hostname)",
-  "neutralized": false,
-  "type": "production_full"
-}
-EOF
-
-# 4. Comprimir todo en un archivo final
-echo "📦 Creando archivo final..."
+# 3. Comprimir todo en formato estándar Odoo
+echo "📦 Creando archivo tar.gz..."
 cd "$BACKUP_DIR"
-tar -czf "${BACKUP_NAME}.tar.gz" "$BACKUP_NAME"
+tar -czf "${BACKUP_NAME}.tar.gz" -C "$BACKUP_NAME" .
 rm -rf "$BACKUP_PATH"
 
 TOTAL_SIZE=$(du -h "${BACKUP_NAME}.tar.gz" | cut -f1)

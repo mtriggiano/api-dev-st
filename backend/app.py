@@ -9,6 +9,13 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
     
+    # Configurar límite de tamaño de archivo (1GB)
+    app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB
+    
+    # Configurar límites de form data
+    app.config['MAX_FORM_MEMORY_SIZE'] = 1024 * 1024 * 1024  # 1GB
+    app.config['MAX_FORM_PARTS'] = 10000
+    
     # Inicializar extensiones
     db.init_app(app)
     CORS(app, origins=app.config['CORS_ORIGINS'])
@@ -21,6 +28,8 @@ def create_app():
     from routes.logs import logs_bp
     from routes.backup import backup_bp
     from routes.github import github_bp
+    from routes.test_upload import test_upload_bp
+    from routes.chunked_upload import chunked_upload_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(metrics_bp, url_prefix='/api/metrics')
@@ -28,6 +37,8 @@ def create_app():
     app.register_blueprint(logs_bp, url_prefix='/api/logs')
     app.register_blueprint(backup_bp, url_prefix='/api/backup')
     app.register_blueprint(github_bp, url_prefix='/api/github')
+    app.register_blueprint(test_upload_bp, url_prefix='/api')
+    app.register_blueprint(chunked_upload_bp, url_prefix='/api')
     
     # Manejadores de errores JWT
     @jwt.expired_token_loader
