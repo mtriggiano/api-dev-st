@@ -28,20 +28,24 @@ INSTANCE_INPUT=$(echo "$INSTANCE_INPUT" | tr '[:upper:]' '[:lower:]' | sed 's/ /
 
 # Si es principal/main/production, usar nombre desde configuración
 if [[ "$INSTANCE_INPUT" == "principal" ]] || [[ "$INSTANCE_INPUT" == "main" ]] || [[ "$INSTANCE_INPUT" == "production" ]]; then
+  # Para instancia principal: usar el nombre del directorio real para filesystem
+  DIR_NAME="$INSTANCE_INPUT"
+  # Pero usar PROD_INSTANCE_NAME para servicio y BD
   INSTANCE="${PROD_INSTANCE_NAME:-odoo-production}"
   DOMAIN="$CF_ZONE_NAME"
   DB_NAME="${PROD_INSTANCE_NAME:-odoo-production}"
 else
+  DIR_NAME="$INSTANCE_INPUT"
   INSTANCE="$INSTANCE_INPUT"
   DOMAIN="$INSTANCE.$CF_ZONE_NAME"
   DB_NAME="$INSTANCE"
 fi
 
-BASE_DIR="$ODOO_ROOT/$INSTANCE"
+BASE_DIR="$ODOO_ROOT/$DIR_NAME"
 INFO_FILE="$BASE_DIR/info-instancia.txt"
-NGINX_CONF="/etc/nginx/sites-available/$INSTANCE"
-NGINX_LINK="/etc/nginx/sites-enabled/$INSTANCE"
-LOG_PATH="/tmp/odoo-create-$INSTANCE.log"
+NGINX_CONF="/etc/nginx/sites-available/$DIR_NAME"
+NGINX_LINK="/etc/nginx/sites-enabled/$DIR_NAME"
+LOG_PATH="/tmp/odoo-create-$DIR_NAME.log"
 
 # Detectar servicio systemd (nombre sin extensión)
 SERVICE_NAME=""
@@ -63,16 +67,16 @@ fi
 
 # Validar existencia
 if [[ ! -d "$BASE_DIR" ]]; then
-  echo "❌ La instancia '$INSTANCE' no existe en $ODOO_ROOT."
+  echo "❌ La instancia '$DIR_NAME' no existe en $ODOO_ROOT."
   exit 1
 fi
 
 # Confirmación explícita
-echo -e "\n⚠️  Esta acción eliminará todos los datos de '$INSTANCE'."
-echo "Para confirmar, escribí exactamente: BORRAR$INSTANCE"
+echo -e "\n⚠️  Esta acción eliminará todos los datos de '$DIR_NAME'."
+echo "Para confirmar, escribí exactamente: BORRAR$DIR_NAME"
 read -p "> " CONFIRM
 
-if [[ "$CONFIRM" != "BORRAR$INSTANCE" ]]; then
+if [[ "$CONFIRM" != "BORRAR$DIR_NAME" ]]; then
   echo "❌ Confirmación incorrecta. Abortando."
   exit 1
 fi
@@ -111,18 +115,36 @@ sudo nginx -t && sudo systemctl reload nginx
 echo "🔐 Eliminando certificado SSL (Certbot)..."
 sudo certbot delete --cert-name "$DOMAIN" --non-interactive >/dev/null 2>&1 || true
 
-echo "☁️ Eliminando subdominio de Cloudflare ($DOMAIN)..."
-DNS_RECORD_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?name=$DOMAIN" \
-  -H "Authorization: Bearer $CF_API_TOKEN" \
-  -H "Content-Type: application/json" | jq -r '.result[0].id')
+echo "☁️ Eliminando registro DNS de Cloudflare ($DOMAIN)..."
 
-if [[ "$DNS_RECORD_ID" != "null" && -n "$DNS_RECORD_ID" ]]; then
-  curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$DNS_RECORD_ID" \
-    -H "Authorization: Bearer $CF_API_TOKEN" \
-    -H "Content-Type: application/json" > /dev/null
-  echo "✅ Subdominio $DOMAIN eliminado de Cloudflare."
+# Verificar que tenemos Zone ID
+if [[ -z "$CF_ZONE_ID" || "$CF_ZONE_ID" == "null" ]]; then
+  echo "❌ Error: No se pudo obtener el Zone ID de Cloudflare"
+  echo "   Verifica que CF_API_TOKEN y DOMAIN_ROOT estén correctos en .env"
 else
-  echo "⚠️  No se encontró registro DNS para $DOMAIN en Cloudflare."
+  # Buscar el registro DNS
+  DNS_RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?name=$DOMAIN" \
+    -H "Authorization: Bearer $CF_API_TOKEN" \
+    -H "Content-Type: application/json")
+  
+  DNS_RECORD_ID=$(echo "$DNS_RESPONSE" | jq -r '.result[0].id')
+  
+  if [[ "$DNS_RECORD_ID" != "null" && -n "$DNS_RECORD_ID" ]]; then
+    echo "   Encontrado registro DNS con ID: $DNS_RECORD_ID"
+    DELETE_RESPONSE=$(curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$DNS_RECORD_ID" \
+      -H "Authorization: Bearer $CF_API_TOKEN" \
+      -H "Content-Type: application/json")
+    
+    if echo "$DELETE_RESPONSE" | jq -e '.success' >/dev/null 2>&1; then
+      echo "✅ Registro DNS $DOMAIN eliminado de Cloudflare."
+    else
+      echo "⚠️  Error al eliminar registro DNS:"
+      echo "   $(echo $DELETE_RESPONSE | jq -r '.errors[0].message' 2>/dev/null || echo 'Sin detalles')"
+    fi
+  else
+    echo "⚠️  No se encontró registro DNS para $DOMAIN en Cloudflare."
+    echo "   Respuesta de API: $(echo $DNS_RESPONSE | jq -r '.result | length') registros encontrados"
+  fi
 fi
 
 # Limpiar puerto usado
@@ -139,9 +161,9 @@ sudo systemctl daemon-reload
 
 # Registrar acción en vitácora
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-echo "$TIMESTAMP - Instancia: $INSTANCE - Puerto: ${PORT:-N/A} - Dominio: $DOMAIN - Eliminada OK" | sudo tee -a "$LOGFILE" >/dev/null
+echo "$TIMESTAMP - Instancia: $DIR_NAME - Puerto: ${PORT:-N/A} - Dominio: $DOMAIN - Eliminada OK" | sudo tee -a "$LOGFILE" >/dev/null
 
-echo "✅ Instancia '$INSTANCE' eliminada completamente."
+echo "✅ Instancia '$DIR_NAME' eliminada completamente."
 
 # Mostrar puertos aún registrados
 if [[ -f "$PUERTOS_FILE" && -s "$PUERTOS_FILE" ]]; then

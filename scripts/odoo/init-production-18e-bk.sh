@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 🚀 Script de creación de instancia Odoo 19 Enterprise - Versión refactorizada
+# 🚀 Script de creación de instancia Odoo 18 Enterprise - Versión refactorizada
 # Usa variables de entorno desde archivo .env
 
 set -e
@@ -8,12 +8,11 @@ set -e
 # Cargar variables de entorno
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../utils/load-env.sh"
-source "$SCRIPT_DIR/../utils/ssl-manager.sh"
 
 # Validar variables requeridas
 source "$SCRIPT_DIR/../utils/validate-env.sh" \
     CF_API_TOKEN CF_ZONE_NAME DB_USER DB_PASSWORD \
-    ODOO_ADMIN_PASSWORD PUBLIC_IP PROD_ROOT ODOO_REPO_PATH
+    ODOO_ADMIN_PASSWORD PUBLIC_IP PROD_ROOT ODOO18_REPO_PATH
 
 # Validaciones de comandos
 command -v jq >/dev/null 2>&1 || { echo >&2 "❌ 'jq' no está instalado."; exit 1; }
@@ -21,7 +20,7 @@ command -v curl >/dev/null 2>&1 || { echo >&2 "❌ 'curl' no está instalado."; 
 
 # Variables desde .env (con valores por defecto para compatibilidad)
 ODOO_ROOT="${PROD_ROOT:-/home/go/apps/production/odoo}"
-REPO="${ODOO_REPO_PATH:-/home/go/apps/repo/odoo19e.zip}"
+REPO="${ODOO18_REPO_PATH:-/home/go/apps/repo/odoo18e.tar.gz}"
 PYTHON="${PYTHON_BIN:-/usr/bin/python3.12}"
 PUERTOS_FILE="${PUERTOS_FILE:-$DATA_PATH/puertos_ocupados_odoo.txt}"
 USER="${SYSTEM_USER:-go}"
@@ -50,13 +49,6 @@ LOG="/tmp/odoo-create-$INSTANCE_NAME.log"
 exec > >(tee -a "$LOG") 2>&1
 
 echo "🚀 Iniciando creación de instancia Odoo: $INSTANCE_NAME"
-echo ""
-
-# Preguntar método SSL ANTES de empezar
-SSL_METHOD=$(prompt_ssl_method)
-echo ""
-echo "✅ Método SSL seleccionado. Continuando con la creación..."
-echo ""
 
 # Cancelación segura
 trap cleanup SIGINT
@@ -100,7 +92,7 @@ else
 fi
 
 BASE_DIR="$ODOO_ROOT/$INSTANCE_NAME"
-SERVICE="/etc/systemd/system/odoo19e-$INSTANCE_NAME.service"
+SERVICE="/etc/systemd/system/odoo18e-$INSTANCE_NAME.service"
 ODOO_CONF="$BASE_DIR/odoo.conf"
 ODOO_LOG="$BASE_DIR/odoo.log"
 NGINX_CONF="/etc/nginx/sites-available/$INSTANCE_NAME"
@@ -172,19 +164,7 @@ mkdir -p "$BASE_DIR"
 mkdir -p "$BASE_DIR/custom_addons"
 mkdir -p "$BASE_DIR/odoo-server"
 echo "📦 Descomprimiendo repositorio en $BASE_DIR/odoo-server..."
-unzip "$REPO" -d "$BASE_DIR/tmp_unzip"
-cp "$BASE_DIR/tmp_unzip/setup.py" "$BASE_DIR/odoo-server/"
-cp "$BASE_DIR/tmp_unzip/requirements19e.txt" "$BASE_DIR/odoo-server/requirements.txt"
-cp -r "$BASE_DIR/tmp_unzip/odoo" "$BASE_DIR/odoo-server/"
-# Copiar odoo-bin y setup si existen
-if [[ -f "$BASE_DIR/tmp_unzip/odoo-bin" ]]; then
-  cp "$BASE_DIR/tmp_unzip/odoo-bin" "$BASE_DIR/odoo-server/"
-  chmod +x "$BASE_DIR/odoo-server/odoo-bin"
-fi
-if [[ -d "$BASE_DIR/tmp_unzip/setup" ]]; then
-  cp -r "$BASE_DIR/tmp_unzip/setup" "$BASE_DIR/odoo-server/"
-fi
-rm -rf "$BASE_DIR/tmp_unzip"
+tar -xzf "$REPO" -C "$BASE_DIR/odoo-server" --strip-components=1
 
 # Verificar que la carpeta odoo existe
 if [[ ! -d "$BASE_DIR/odoo-server/odoo" ]]; then
@@ -194,7 +174,7 @@ fi
 
 # Verificar que odoo-bin existe, si no, crearlo
 if [[ ! -f "$BASE_DIR/odoo-server/odoo-bin" ]]; then
-  echo "⚠️  'odoo-bin' no encontrado en el ZIP. Creándolo automáticamente..."
+  echo "⚠️  'odoo-bin' no encontrado en el TAR.GZ. Creándolo automáticamente..."
   cat > "$BASE_DIR/odoo-server/odoo-bin" <<'ODOOBIN'
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
@@ -223,7 +203,7 @@ pip install --upgrade pip wheel
 echo "📦 Instalando requerimientos Python..."
 pip install -r "$BASE_DIR/odoo-server/requirements.txt"
 echo "📦 Instalando dependencias adicionales comunes..."
-pip install phonenumbers qrcode pillow
+pip install phonenumbers
 
 echo "🗑️ Limpiando base de datos existente si existe..."
 sudo -u postgres dropdb "$INSTANCE_NAME" 2>/dev/null || true
@@ -269,17 +249,17 @@ Restart=always
 
 [Install]
 WantedBy=multi-user.target
-" | sudo tee /etc/systemd/system/odoo19e-$INSTANCE_NAME.service > /dev/null
+" | sudo tee /etc/systemd/system/odoo18e-$INSTANCE_NAME.service > /dev/null
 
-if [ ! -f "/etc/systemd/system/odoo19e-$INSTANCE_NAME.service" ]; then
-  echo "❌ Error crítico: No se pudo crear el archivo de servicio systemd /etc/systemd/system/odoo19e-$INSTANCE_NAME.service"
+if [ ! -f "/etc/systemd/system/odoo18e-$INSTANCE_NAME.service" ]; then
+  echo "❌ Error crítico: No se pudo crear el archivo de servicio systemd /etc/systemd/system/odoo18e-$INSTANCE_NAME.service"
   exit 1
 fi
 
 echo "🔄 Recargando systemd y habilitando servicio..."
 sudo systemctl daemon-reload
 echo "🌀 Habilitando servicio systemd (sin iniciar aún)..."
-sudo systemctl enable "odoo19e-$INSTANCE_NAME"
+sudo systemctl enable "odoo18e-$INSTANCE_NAME"
 
 # 6. Módulos y assets
 echo "🔌 Cerrando conexiones existentes a la base de datos..."
@@ -312,20 +292,113 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "🚀 Iniciando servicio Odoo..."
-sudo systemctl start "odoo19e-$INSTANCE_NAME"
+sudo systemctl start "odoo18e-$INSTANCE_NAME"
 sleep 3
 
-if sudo systemctl is-active --quiet "odoo19e-$INSTANCE_NAME"; then
+if sudo systemctl is-active --quiet "odoo18e-$INSTANCE_NAME"; then
   echo "✅ Servicio Odoo iniciado correctamente."
 else
   echo "❌ Error: El servicio no pudo iniciarse. Revisa los logs:"
-  echo "   sudo journalctl -u odoo19e-$INSTANCE_NAME -n 50"
+  echo "   sudo journalctl -u odoo18e-$INSTANCE_NAME -n 50"
   exit 1
 fi
 
 # 7. Nginx y SSL
-# Configurar SSL según la elección del usuario (ya preguntado al inicio)
-configure_ssl "$DOMAIN" "$INSTANCE_NAME" "$PORT" "$SSL_METHOD"
+[[ -L "/etc/nginx/sites-enabled/$INSTANCE_NAME" ]] && sudo rm -f "/etc/nginx/sites-enabled/$INSTANCE_NAME"
+
+echo "🔍 Verificando si ya existe certificado SSL para $DOMAIN..."
+if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    echo "🚫 Certificado no encontrado. Creando configuración HTTP temporal..."
+    
+    # Crear configuración HTTP simple temporal
+    echo "server {
+    listen 80;
+    server_name $DOMAIN;
+
+    client_max_body_size 20M;
+
+    # Bloquear acceso al gestor de bases de datos
+    location ~* ^/web/database/(manager|selector|create|duplicate|drop|backup|restore|change_password) {
+        deny all;
+        return 403;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:$PORT;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_http_version 1.1;
+        proxy_read_timeout 720s;
+    }
+}" | sudo tee /etc/nginx/sites-available/$INSTANCE_NAME > /dev/null
+    
+    sudo ln -s /etc/nginx/sites-available/$INSTANCE_NAME /etc/nginx/sites-enabled/$INSTANCE_NAME
+    
+    echo "🔄 Recargando Nginx con configuración HTTP..."
+    sudo nginx -t && sudo systemctl reload nginx || sudo systemctl start nginx
+    
+    echo "📜 Obteniendo certificado SSL con Certbot..."
+    sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN --redirect
+    
+    echo "✅ Certificado SSL obtenido y configurado automáticamente por Certbot"
+else
+    echo "✅ Certificado SSL ya existe. Creando configuración con HTTPS..."
+    
+    # Crear configuración con SSL
+    echo "map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    '' close;
+}
+
+server {
+    server_name $DOMAIN;
+
+    client_max_body_size 20M;
+
+    # Bloquear acceso al gestor de bases de datos
+    location ~* ^/web/database/(manager|selector|create|duplicate|drop|backup|restore|change_password) {
+        deny all;
+        return 403;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:$PORT;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_http_version 1.1;
+        proxy_read_timeout 720s;
+    }
+
+    listen 443 ssl;
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+
+server {
+    if (\$host = $DOMAIN) {
+        return 301 https://\$host\$request_uri;
+    }
+
+    listen 80;
+    server_name $DOMAIN;
+    return 404;
+}" | sudo tee /etc/nginx/sites-available/$INSTANCE_NAME > /dev/null
+    
+    sudo ln -s /etc/nginx/sites-available/$INSTANCE_NAME /etc/nginx/sites-enabled/$INSTANCE_NAME
+    
+    echo "🔄 Recargando Nginx con configuración HTTPS..."
+    sudo nginx -t && sudo systemctl reload nginx
+fi
+
+echo "✅ Nginx configurado correctamente para $DOMAIN"
 
 
 echo "📄 Generando archivo de información de la instancia..."
@@ -341,13 +414,13 @@ cat > "$INFO_FILE" <<EOF
 📄 Configuración: $ODOO_CONF
 📝 Log: $ODOO_LOG
 🪵 Log de instalación: $LOG
-🧩 Servicio systemd: odoo19e-$INSTANCE_NAME
-🌀 Logs: sudo journalctl -u odoo19e-$INSTANCE_NAME -n 50 --no-pager
+🧩 Servicio systemd: odoo18e-$INSTANCE_NAME
+🌀 Logs: sudo journalctl -u odoo18e-$INSTANCE_NAME -n 50 --no-pager
 🌐 Nginx: $NGINX_CONF
 🕒 Zona horaria: America/Argentina/Buenos_Aires
 🌐 IP pública: $PUBLIC_IP
-🔁 Reiniciar servicio: sudo systemctl restart odoo19e-$INSTANCE_NAME
-📋 Ver estado:         sudo systemctl status odoo19e-$INSTANCE_NAME
+🔁 Reiniciar servicio: sudo systemctl restart odoo18e-$INSTANCE_NAME
+📋 Ver estado:         sudo systemctl status odoo18e-$INSTANCE_NAME
 📦 Módulos instalados: base, web, web_enterprise, mail, account, web_assets, base_setup, contacts, l10n_latam_base, l10n_ar, l10n_ar_reports
 EOF
 

@@ -152,6 +152,8 @@ echo "⬆️  Actualizando pip y wheel..."
 pip install --upgrade pip wheel
 echo "📦 Instalando requerimientos Python..."
 pip install -r "$BASE_DIR/odoo-server/requirements.txt"
+echo "📦 Instalando dependencias adicionales comunes..."
+pip install phonenumbers
 
 # Clonar base de datos desde producción
 echo "🗄️  Clonando base de datos desde producción..."
@@ -481,6 +483,8 @@ echo "🐍 Actualizando dependencias Python..."
 source "$DEV_DIR/venv/bin/activate"
 pip install --upgrade pip wheel
 pip install -r "$DEV_DIR/odoo-server/requirements.txt"
+echo "📦 Instalando dependencias adicionales comunes..."
+pip install phonenumbers
 
 echo "▶️  Iniciando servicio Odoo..."
 sudo systemctl start "odoo19e-$INSTANCE_NAME"

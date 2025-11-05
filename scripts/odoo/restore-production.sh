@@ -17,8 +17,35 @@ PROD_DB="${PROD_INSTANCE_NAME:-odoo-production}"
 BACKUP_DIR="${BACKUPS_PATH:-/home/go/backups}"
 FILESTORE_BASE="/home/go/.local/share/Odoo/filestore"
 PROD_FILESTORE="$FILESTORE_BASE/$PROD_DB"
-SERVICE_NAME="odoo19e-${PROD_INSTANCE}"
 USER="${SYSTEM_USER:-go}"
+
+# Detectar automáticamente el servicio (odoo19e o odoo18e)
+# Buscar cualquier servicio odoo que exista (principal, production, etc.)
+SERVICE_NAME=""
+for service_file in /etc/systemd/system/odoo*.service; do
+    if [[ -f "$service_file" ]]; then
+        # Extraer el nombre del servicio sin la extensión .service
+        SERVICE_NAME=$(basename "$service_file" .service)
+        if [[ "$SERVICE_NAME" =~ ^odoo19e- ]]; then
+            echo "🔍 Detectado: Odoo 19 Enterprise - Servicio: $SERVICE_NAME"
+            break
+        elif [[ "$SERVICE_NAME" =~ ^odoo18e- ]]; then
+            echo "🔍 Detectado: Odoo 18 Enterprise - Servicio: $SERVICE_NAME"
+            break
+        elif [[ "$SERVICE_NAME" =~ ^odoo18- ]]; then
+            echo "🔍 Detectado: Odoo 18 Community - Servicio: $SERVICE_NAME"
+            break
+        fi
+    fi
+done
+
+if [[ -z "$SERVICE_NAME" ]]; then
+    echo "❌ Error: No se encontró ningún servicio systemd de Odoo"
+    echo "   Buscado en: /etc/systemd/system/odoo*.service"
+    echo "   Servicios disponibles:"
+    ls -1 /etc/systemd/system/odoo*.service 2>/dev/null || echo "   (ninguno)"
+    exit 1
+fi
 
 # Validar argumentos
 if [ $# -ne 1 ]; then

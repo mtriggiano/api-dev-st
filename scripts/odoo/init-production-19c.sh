@@ -8,6 +8,7 @@ set -e
 # Cargar variables de entorno
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../utils/load-env.sh"
+source "$SCRIPT_DIR/../utils/ssl-manager.sh"
 
 # Validar variables requeridas
 source "$SCRIPT_DIR/../utils/validate-env.sh" \
@@ -50,7 +51,14 @@ LOG="/tmp/odoo-create-$INSTANCE_NAME.log"
 # Redirigir salida tanto a pantalla como a log
 exec > >(tee -a "$LOG") 2>&1
 
-echo "🚀 Iniciando creación de instancia Odoo Community: $INSTANCE_NAME"
+echo "🚀 Iniciando creación de instancia Odoo: $INSTANCE_NAME"
+echo ""
+
+# Preguntar método SSL ANTES de empezar
+SSL_METHOD=$(prompt_ssl_method)
+echo ""
+echo "✅ Método SSL seleccionado. Continuando con la creación..."
+echo ""
 
 # Validar nombre
 if [[ ! "$INSTANCE" =~ ^[a-z0-9_-]+$ ]]; then
@@ -179,6 +187,8 @@ $PYTHON -m venv venv
 source venv/bin/activate
 pip install --upgrade pip wheel
 pip install -r odoo-server/requirements.txt
+echo "📦 Instalando dependencias adicionales comunes..."
+pip install phonenumbers
 
 echo "🗑️ Limpiando base de datos existente si existe..."
 sudo -u postgres dropdb "$INSTANCE_NAME" 2>/dev/null || true
@@ -279,101 +289,8 @@ else
 fi
 
 # 7. Nginx y SSL
-[[ -L "/etc/nginx/sites-enabled/$INSTANCE_NAME" ]] && sudo rm -f "/etc/nginx/sites-enabled/$INSTANCE_NAME"
-
-echo "🔍 Verificando si ya existe certificado SSL para $DOMAIN..."
-if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
-    echo "🚫 Certificado no encontrado. Creando configuración HTTP temporal..."
-    
-    # Crear configuración HTTP simple temporal
-    echo "server {
-    listen 80;
-    server_name $DOMAIN;
-
-    client_max_body_size 20M;
-
-    # Bloquear acceso al gestor de bases de datos
-    location ~* ^/web/database/(manager|selector|create|duplicate|drop|backup|restore|change_password) {
-        deny all;
-        return 403;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:$PORT;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_http_version 1.1;
-        proxy_read_timeout 720s;
-    }
-}" | sudo tee /etc/nginx/sites-available/$INSTANCE_NAME > /dev/null
-    
-    sudo ln -s /etc/nginx/sites-available/$INSTANCE_NAME /etc/nginx/sites-enabled/$INSTANCE_NAME
-    
-    echo "🔄 Recargando Nginx con configuración HTTP..."
-    sudo nginx -t && sudo systemctl reload nginx || sudo systemctl start nginx
-    
-    echo "📜 Obteniendo certificado SSL con Certbot..."
-    sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN --redirect
-    
-    echo "✅ Certificado SSL obtenido y configurado automáticamente por Certbot"
-else
-    echo "✅ Certificado SSL ya existe. Creando configuración con HTTPS..."
-    
-    # Crear configuración con SSL
-    echo "map \$http_upgrade \$connection_upgrade {
-    default upgrade;
-    '' close;
-}
-
-server {
-    server_name $DOMAIN;
-
-    client_max_body_size 20M;
-
-    # Bloquear acceso al gestor de bases de datos
-    location ~* ^/web/database/(manager|selector|create|duplicate|drop|backup|restore|change_password) {
-        deny all;
-        return 403;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:$PORT;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-        proxy_http_version 1.1;
-        proxy_read_timeout 720s;
-    }
-
-    listen 443 ssl;
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-}
-
-server {
-    if (\$host = $DOMAIN) {
-        return 301 https://\$host\$request_uri;
-    }
-
-    listen 80;
-    server_name $DOMAIN;
-    return 404;
-}" | sudo tee /etc/nginx/sites-available/$INSTANCE_NAME > /dev/null
-    
-    sudo ln -s /etc/nginx/sites-available/$INSTANCE_NAME /etc/nginx/sites-enabled/$INSTANCE_NAME
-    
-    echo "🔄 Recargando Nginx con configuración HTTPS..."
-    sudo nginx -t && sudo systemctl reload nginx
-fi
-
-echo "✅ Nginx configurado correctamente para $DOMAIN"
+# Configurar SSL según la elección del usuario (ya preguntado al inicio)
+configure_ssl "$DOMAIN" "$INSTANCE_NAME" "$PORT" "$SSL_METHOD"
 
 echo "📄 Generando archivo de información de la instancia..."
 # 8. Info

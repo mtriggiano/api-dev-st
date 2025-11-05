@@ -168,6 +168,105 @@ sudo ufw allow 443/tcp
 
 ---
 
+### ❌ Límite de Tasa de Let's Encrypt
+
+**Síntoma:**
+- Error: `too many certificates (5) already issued for this exact set of identifiers in the last 168h0m0s`
+- Certbot falla al intentar obtener certificado
+
+**Causa:**
+Let's Encrypt tiene un **límite de 5 certificados por conjunto exacto de dominios en 168 horas (7 días)**.
+
+**Soluciones:**
+
+#### 1. Esperar (Recomendado para Producción)
+El mensaje de error indica cuándo puedes volver a intentar:
+```
+retry after 2025-11-06 03:11:23 UTC
+```
+
+#### 2. Usar Certificado Existente
+Los scripts actualizados detectan automáticamente certificados válidos:
+
+```bash
+# Verificar certificados existentes
+sudo certbot certificates
+
+# Ver fecha de expiración
+sudo openssl x509 -enddate -noout -in /etc/letsencrypt/live/grupoorange.ar/fullchain.pem
+
+# Verificar validez (expira en más de 24 horas)
+sudo openssl x509 -checkend 86400 -noout -in /etc/letsencrypt/live/grupoorange.ar/fullchain.pem
+```
+
+Si el certificado es válido, los scripts `init-production-*.sh` lo reutilizarán automáticamente.
+
+#### 3. Usar HTTP Temporalmente
+Si no hay certificado válido y alcanzaste el límite, el sitio funcionará con HTTP:
+
+```bash
+# El sitio estará disponible en:
+http://grupoorange.ar
+
+# Cuando expire el límite, obtener SSL:
+sudo certbot --nginx -d grupoorange.ar --redirect
+```
+
+#### 4. Certificado Staging (Solo Testing)
+⚠️ **NO usar en producción** - No es confiable para navegadores.
+
+```bash
+sudo certbot --nginx -d grupoorange.ar --staging
+```
+
+**Verificaciones:**
+
+```bash
+# Ver todos los certificados
+sudo certbot certificates
+
+# Ver configuración SSL de Nginx
+sudo nginx -T | grep -A 20 "server_name grupoorange.ar"
+
+# Verificar puerto 443
+sudo lsof -i :443
+
+# Test SSL
+curl -I https://grupoorange.ar
+```
+
+**Renovación Automática:**
+```bash
+# Verificar timer de renovación
+sudo systemctl status certbot.timer
+
+# Test de renovación (sin renovar realmente)
+sudo certbot renew --dry-run
+
+# Forzar renovación (solo si expira pronto)
+sudo certbot renew --force-renewal
+```
+
+**Mejoras en Scripts:**
+
+Los scripts `init-production-18e.sh`, `init-production-19e.sh` y `init-production-19c.sh` ahora:
+
+1. ✅ Detectan certificados existentes antes de solicitar nuevos
+2. ✅ Validan que el certificado no haya expirado
+3. ✅ Manejan errores de límite de tasa gracefully
+4. ✅ Dejan el sitio funcional en HTTP si falla SSL
+5. ✅ Muestran instrucciones claras para obtener SSL manualmente
+
+**Mejores Prácticas:**
+
+- 🔒 No eliminar certificados innecesariamente (duran 90 días)
+- 🧪 Usar `--staging` para testing de scripts
+- 📊 Monitorear expiración de certificados
+- 💾 Incluir `/etc/letsencrypt/` en backups
+- ⏰ Verificar que `certbot.timer` esté activo para renovación automática
+
+---
+
 ### ❌ Métricas no se guardan
 
 **Síntoma:**
@@ -359,4 +458,4 @@ cd /home/go/api
 
 ---
 
-**Última actualización:** 2025-10-28
+**Última actualización:** 2025-11-05

@@ -72,13 +72,23 @@ source scripts/utils/validate-env.sh --full
 - **Sesiones**: Control de acceso
 - **Logs de auditoría**: Todas las acciones
 
-### Gestión de Backups y Restauración (Nuevo) 💾
+### Gestión de Backups y Restauración 💾
 - **Backup de producción**: Crear backups completos (BD + archivos)
 - **Subir backups**: Carga chunked para archivos grandes (hasta 1GB)
 - **Listar backups**: Ver todos los backups disponibles con detalles
 - **Restaurar producción**: Restaurar BD y archivos desde backup
 - **Gestión automática**: Scripts de backup y restauración
 - **Progreso en tiempo real**: Seguimiento de carga y restauración
+
+### Configuración SSL Flexible 🔐 (Nuevo)
+- **Múltiples opciones**: Let's Encrypt, Cloudflare Origin, o solo HTTP
+- **Selección interactiva**: Elige el método al crear instancias
+- **Sin límites de tasa**: Usa Cloudflare para evitar límites de Let's Encrypt
+- **Certificados de 15 años**: Con Cloudflare Origin Certificate
+- **Renovación automática**: Let's Encrypt se renueva cada 90 días
+- **Configuración simplificada**: Todo automatizado
+
+👉 **Ver documentación completa:** [SSL_CONFIGURATION.md](docs/SSL_CONFIGURATION.md)
 
 ### Integración GitHub 🔗
 - **Control de versiones**: Git para custom addons
@@ -134,6 +144,8 @@ source scripts/utils/validate-env.sh --full
 ├── docs/                       # Documentación
 │   ├── QUICKSTART.md          # Guía de inicio rápido
 │   ├── INSTALL.md             # Instalación manual
+│   ├── SSL_CONFIGURATION.md   # ⭐ Configuración SSL (Nuevo)
+│   ├── TROUBLESHOOTING.md     # Solución de problemas
 │   ├── GITHUB_INTEGRATION.md  # Integración con GitHub
 │   └── [otros documentos]
 │

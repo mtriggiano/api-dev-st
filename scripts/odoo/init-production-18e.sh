@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 🚀 Script de creación de instancia Odoo 19 Enterprise - Versión refactorizada
+# 🚀 Script de creación de instancia Odoo 18 Enterprise - Versión refactorizada
 # Usa variables de entorno desde archivo .env
 
 set -e
@@ -13,7 +13,7 @@ source "$SCRIPT_DIR/../utils/ssl-manager.sh"
 # Validar variables requeridas
 source "$SCRIPT_DIR/../utils/validate-env.sh" \
     CF_API_TOKEN CF_ZONE_NAME DB_USER DB_PASSWORD \
-    ODOO_ADMIN_PASSWORD PUBLIC_IP PROD_ROOT ODOO_REPO_PATH
+    ODOO_ADMIN_PASSWORD PUBLIC_IP PROD_ROOT ODOO18_REPO_PATH
 
 # Validaciones de comandos
 command -v jq >/dev/null 2>&1 || { echo >&2 "❌ 'jq' no está instalado."; exit 1; }
@@ -21,7 +21,7 @@ command -v curl >/dev/null 2>&1 || { echo >&2 "❌ 'curl' no está instalado."; 
 
 # Variables desde .env (con valores por defecto para compatibilidad)
 ODOO_ROOT="${PROD_ROOT:-/home/go/apps/production/odoo}"
-REPO="${ODOO_REPO_PATH:-/home/go/apps/repo/odoo19e.zip}"
+REPO="${ODOO18_REPO_PATH:-/home/go/apps/repo/odoo18e.zip}"
 PYTHON="${PYTHON_BIN:-/usr/bin/python3.12}"
 PUERTOS_FILE="${PUERTOS_FILE:-$DATA_PATH/puertos_ocupados_odoo.txt}"
 USER="${SYSTEM_USER:-go}"
@@ -100,7 +100,7 @@ else
 fi
 
 BASE_DIR="$ODOO_ROOT/$INSTANCE_NAME"
-SERVICE="/etc/systemd/system/odoo19e-$INSTANCE_NAME.service"
+SERVICE="/etc/systemd/system/odoo18e-$INSTANCE_NAME.service"
 ODOO_CONF="$BASE_DIR/odoo.conf"
 ODOO_LOG="$BASE_DIR/odoo.log"
 NGINX_CONF="/etc/nginx/sites-available/$INSTANCE_NAME"
@@ -172,17 +172,32 @@ mkdir -p "$BASE_DIR"
 mkdir -p "$BASE_DIR/custom_addons"
 mkdir -p "$BASE_DIR/odoo-server"
 echo "📦 Descomprimiendo repositorio en $BASE_DIR/odoo-server..."
-unzip "$REPO" -d "$BASE_DIR/tmp_unzip"
-cp "$BASE_DIR/tmp_unzip/setup.py" "$BASE_DIR/odoo-server/"
-cp "$BASE_DIR/tmp_unzip/requirements19e.txt" "$BASE_DIR/odoo-server/requirements.txt"
-cp -r "$BASE_DIR/tmp_unzip/odoo" "$BASE_DIR/odoo-server/"
+unzip -q "$REPO" -d "$BASE_DIR/tmp_unzip"
+
+# Detectar la carpeta raíz dentro del ZIP
+ROOT_FOLDER=$(find "$BASE_DIR/tmp_unzip" -maxdepth 1 -type d ! -name "tmp_unzip" ! -name "__MACOSX" | head -1)
+if [[ -z "$ROOT_FOLDER" ]]; then
+  ROOT_FOLDER="$BASE_DIR/tmp_unzip"
+fi
+
+echo "  → Carpeta detectada: $(basename $ROOT_FOLDER)"
+
+# Copiar archivos desde la carpeta raíz
+if [[ -f "$ROOT_FOLDER/setup.py" ]]; then
+  cp "$ROOT_FOLDER/setup.py" "$BASE_DIR/odoo-server/"
+fi
+if [[ -f "$ROOT_FOLDER/requirements.txt" ]]; then
+  cp "$ROOT_FOLDER/requirements.txt" "$BASE_DIR/odoo-server/"
+fi
+cp -r "$ROOT_FOLDER/odoo" "$BASE_DIR/odoo-server/"
+
 # Copiar odoo-bin y setup si existen
-if [[ -f "$BASE_DIR/tmp_unzip/odoo-bin" ]]; then
-  cp "$BASE_DIR/tmp_unzip/odoo-bin" "$BASE_DIR/odoo-server/"
+if [[ -f "$ROOT_FOLDER/odoo-bin" ]]; then
+  cp "$ROOT_FOLDER/odoo-bin" "$BASE_DIR/odoo-server/"
   chmod +x "$BASE_DIR/odoo-server/odoo-bin"
 fi
-if [[ -d "$BASE_DIR/tmp_unzip/setup" ]]; then
-  cp -r "$BASE_DIR/tmp_unzip/setup" "$BASE_DIR/odoo-server/"
+if [[ -d "$ROOT_FOLDER/setup" ]]; then
+  cp -r "$ROOT_FOLDER/setup" "$BASE_DIR/odoo-server/"
 fi
 rm -rf "$BASE_DIR/tmp_unzip"
 
@@ -223,7 +238,7 @@ pip install --upgrade pip wheel
 echo "📦 Instalando requerimientos Python..."
 pip install -r "$BASE_DIR/odoo-server/requirements.txt"
 echo "📦 Instalando dependencias adicionales comunes..."
-pip install phonenumbers qrcode pillow
+pip install phonenumbers
 
 echo "🗑️ Limpiando base de datos existente si existe..."
 sudo -u postgres dropdb "$INSTANCE_NAME" 2>/dev/null || true
@@ -269,17 +284,17 @@ Restart=always
 
 [Install]
 WantedBy=multi-user.target
-" | sudo tee /etc/systemd/system/odoo19e-$INSTANCE_NAME.service > /dev/null
+" | sudo tee /etc/systemd/system/odoo18e-$INSTANCE_NAME.service > /dev/null
 
-if [ ! -f "/etc/systemd/system/odoo19e-$INSTANCE_NAME.service" ]; then
-  echo "❌ Error crítico: No se pudo crear el archivo de servicio systemd /etc/systemd/system/odoo19e-$INSTANCE_NAME.service"
+if [ ! -f "/etc/systemd/system/odoo18e-$INSTANCE_NAME.service" ]; then
+  echo "❌ Error crítico: No se pudo crear el archivo de servicio systemd /etc/systemd/system/odoo18e-$INSTANCE_NAME.service"
   exit 1
 fi
 
 echo "🔄 Recargando systemd y habilitando servicio..."
 sudo systemctl daemon-reload
 echo "🌀 Habilitando servicio systemd (sin iniciar aún)..."
-sudo systemctl enable "odoo19e-$INSTANCE_NAME"
+sudo systemctl enable "odoo18e-$INSTANCE_NAME"
 
 # 6. Módulos y assets
 echo "🔌 Cerrando conexiones existentes a la base de datos..."
@@ -312,14 +327,14 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "🚀 Iniciando servicio Odoo..."
-sudo systemctl start "odoo19e-$INSTANCE_NAME"
+sudo systemctl start "odoo18e-$INSTANCE_NAME"
 sleep 3
 
-if sudo systemctl is-active --quiet "odoo19e-$INSTANCE_NAME"; then
+if sudo systemctl is-active --quiet "odoo18e-$INSTANCE_NAME"; then
   echo "✅ Servicio Odoo iniciado correctamente."
 else
   echo "❌ Error: El servicio no pudo iniciarse. Revisa los logs:"
-  echo "   sudo journalctl -u odoo19e-$INSTANCE_NAME -n 50"
+  echo "   sudo journalctl -u odoo18e-$INSTANCE_NAME -n 50"
   exit 1
 fi
 
@@ -341,13 +356,13 @@ cat > "$INFO_FILE" <<EOF
 📄 Configuración: $ODOO_CONF
 📝 Log: $ODOO_LOG
 🪵 Log de instalación: $LOG
-🧩 Servicio systemd: odoo19e-$INSTANCE_NAME
-🌀 Logs: sudo journalctl -u odoo19e-$INSTANCE_NAME -n 50 --no-pager
+🧩 Servicio systemd: odoo18e-$INSTANCE_NAME
+🌀 Logs: sudo journalctl -u odoo18e-$INSTANCE_NAME -n 50 --no-pager
 🌐 Nginx: $NGINX_CONF
 🕒 Zona horaria: America/Argentina/Buenos_Aires
 🌐 IP pública: $PUBLIC_IP
-🔁 Reiniciar servicio: sudo systemctl restart odoo19e-$INSTANCE_NAME
-📋 Ver estado:         sudo systemctl status odoo19e-$INSTANCE_NAME
+🔁 Reiniciar servicio: sudo systemctl restart odoo18e-$INSTANCE_NAME
+📋 Ver estado:         sudo systemctl status odoo18e-$INSTANCE_NAME
 📦 Módulos instalados: base, web, web_enterprise, mail, account, web_assets, base_setup, contacts, l10n_latam_base, l10n_ar, l10n_ar_reports
 EOF
 
