@@ -148,3 +148,8 @@ script/
 !data/.gitkeep
 !config/.gitkeep
 !logs/.gitkeep
+
+# Python cache files
+**/__pycache__/
+*.pyc
+*.pyo
