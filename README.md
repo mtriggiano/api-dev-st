@@ -259,6 +259,8 @@ Ver `.env.example` para la lista completa de variables.
 - `GET /api/github/config/:instance` - Obtener configuración
 - `POST /api/github/config` - Crear/actualizar configuración
 - `DELETE /api/github/config/:instance` - Eliminar configuración
+- `POST /api/github/config/:instance/reset` - ⭐ **NUEVO** Resetear configuración (limpia token)
+- `POST /api/github/config/:instance/reconfigure` - ⭐ **NUEVO** Reconfigurar con nuevo token
 - `POST /api/github/init-repo` - Inicializar repositorio Git
 - `GET /api/github/status/:instance` - Estado del repositorio
 - `POST /api/github/commit` - Crear commit

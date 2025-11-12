@@ -23,6 +23,10 @@ class GitManager:
     def _run_git_command(self, command: List[str], cwd: str) -> Dict:
         """Ejecuta un comando git y retorna el resultado"""
         try:
+            # Usar ruta completa de git para evitar problemas de PATH
+            if command[0] == 'git':
+                command[0] = '/usr/bin/git'
+            
             result = subprocess.run(
                 command,
                 cwd=cwd,
@@ -138,6 +142,10 @@ class GitManager:
         if not result['success']:
             error_msg = result.get('stderr') or result.get('error') or 'Error desconocido'
             return {'success': False, 'error': f'Error al inicializar repo: {error_msg}'}
+        
+        # Configurar usuario Git (necesario para commits)
+        self._run_git_command(['git', 'config', 'user.name', 'API Dev Panel'], local_path)
+        self._run_git_command(['git', 'config', 'user.email', 'dev@panel.local'], local_path)
         
         # Agregar remote
         result = self._run_git_command(['git', 'remote', 'add', 'origin', repo_url], local_path)

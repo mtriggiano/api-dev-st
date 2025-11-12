@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Github, CheckCircle, XCircle, Loader, AlertCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { Github, CheckCircle, XCircle, Loader, AlertCircle, ChevronDown, ChevronUp, ExternalLink, RefreshCw, Trash2 } from 'lucide-react';
 import { github } from '../lib/api';
 
 export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }) {
-  const [step, setStep] = useState('input'); // input, verifying, configuring, success, error, git-actions
+  const [step, setStep] = useState('input'); // input, verifying, configuring, success, error, git-actions, reconfigure
   const [githubToken, setGithubToken] = useState('');
   const [repoUrl, setRepoUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -15,6 +15,8 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
   const [gitLoading, setGitLoading] = useState(false);
   const [gitSuccess, setGitSuccess] = useState('');
   const [showInstructions, setShowInstructions] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (isOpen && instanceName) {
@@ -191,6 +193,87 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
     }
   };
 
+  const handleReset = async () => {
+    setLoading(true);
+    setError('');
+    setGitSuccess('');
+    
+    try {
+      const response = await github.resetConfig(instanceName);
+      if (response.data.success) {
+        setGitSuccess('Configuración reseteada. Genera un nuevo token en GitHub.');
+        setExistingConfig(null);
+        setStep('reconfigure');
+        setShowResetConfirm(false);
+      } else {
+        setError(response.data.error || 'Error al resetear configuración');
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al resetear configuración');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReconfigure = async () => {
+    const cleanToken = githubToken.trim();
+    
+    if (!cleanToken) {
+      setError('Debes ingresar un token de GitHub');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setStep('verifying');
+
+    try {
+      const response = await github.reconfigureConfig(instanceName, {
+        github_token: cleanToken
+      });
+      
+      if (response.data.success) {
+        setGitSuccess('¡Configuración actualizada exitosamente!');
+        setStep('success');
+        setTimeout(() => {
+          onSuccess && onSuccess();
+          handleClose();
+        }, 2000);
+      } else {
+        throw new Error(response.data.error || 'Error al reconfigurar');
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Error al reconfigurar');
+      setStep('reconfigure');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      const response = await github.deleteConfig(instanceName);
+      if (response.data.success) {
+        setGitSuccess('Configuración eliminada exitosamente');
+        setExistingConfig(null);
+        setShowDeleteConfirm(false);
+        setTimeout(() => {
+          onSuccess && onSuccess();
+          handleClose();
+        }, 1500);
+      } else {
+        setError(response.data.error || 'Error al eliminar configuración');
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al eliminar configuración');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleClose = () => {
     setStep('input');
     setGithubToken('');
@@ -198,6 +281,8 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
     setError('');
     setGithubUser(null);
     setExistingConfig(null);
+    setShowResetConfirm(false);
+    setShowDeleteConfirm(false);
     onClose();
   };
 
@@ -213,7 +298,9 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
           </div>
           <div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {step === 'git-actions' ? 'Control de Versiones Git' : 'Conectar con GitHub'}
+              {step === 'git-actions' ? 'Control de Versiones Git' : 
+               step === 'reconfigure' ? 'Reconfigurar GitHub' : 
+               'Conectar con GitHub'}
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-300">
               Instancia: {instanceName}
@@ -338,10 +425,30 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
               </button>
             </div>
 
+            {/* Botones de gestión */}
+            <div className="border-t border-gray-200 dark:border-gray-600 pt-4 mt-4 space-y-2">
+              <button
+                onClick={() => setShowResetConfirm(true)}
+                disabled={loading}
+                className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Resetear Configuración
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={loading}
+                className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Eliminar Configuración
+              </button>
+            </div>
+
             {/* Botón Cerrar */}
             <button
               onClick={handleClose}
-              className="w-full bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg transition-colors"
+              className="w-full bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg transition-colors mt-2"
             >
               Cerrar
             </button>
@@ -565,6 +672,161 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
             >
               Intentar de nuevo
             </button>
+          </div>
+        )}
+
+        {/* Formulario de Reconfiguración */}
+        {step === 'reconfigure' && (
+          <div className="space-y-4">
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3 mb-4">
+              <p className="text-sm text-yellow-800 dark:text-yellow-200 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>
+                  La configuración ha sido reseteada. Genera un nuevo token en GitHub y pégalo aquí para reconfigurar.
+                </span>
+              </p>
+            </div>
+
+            {gitSuccess && (
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg p-3">
+                <p className="text-sm text-green-800 dark:text-green-200 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  {gitSuccess}
+                </p>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Nuevo Token de GitHub
+              </label>
+              <input
+                type="password"
+                value={githubToken}
+                onChange={(e) => setGithubToken(e.target.value)}
+                placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                El token debe empezar con <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">ghp_</code>
+              </p>
+            </div>
+
+            <a
+              href="https://github.com/settings/tokens/new"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Ir a crear token en GitHub
+            </a>
+
+            {error && (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg p-3">
+                <p className="text-sm text-red-800 dark:text-red-200 flex items-center gap-2">
+                  <XCircle className="w-4 h-4 flex-shrink-0" />
+                  {error}
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleReconfigure}
+                disabled={loading}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Reconfigurando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    Reconfigurar
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleClose}
+                disabled={loading}
+                className="flex-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de confirmación de Reset */}
+        {showResetConfirm && (
+          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm mx-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="bg-yellow-100 dark:bg-yellow-900/30 p-2 rounded-lg">
+                  <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+                </div>
+                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  ¿Resetear configuración?
+                </h4>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                Esto limpiará el token actual. Deberás generar un nuevo token en GitHub y reconfigurarlo.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleReset}
+                  disabled={loading}
+                  className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Reseteando...' : 'Resetear'}
+                </button>
+                <button
+                  onClick={() => setShowResetConfirm(false)}
+                  disabled={loading}
+                  className="flex-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de confirmación de Delete */}
+        {showDeleteConfirm && (
+          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm mx-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="bg-red-100 dark:bg-red-900/30 p-2 rounded-lg">
+                  <Trash2 className="w-6 h-6 text-red-600 dark:text-red-400" />
+                </div>
+                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  ¿Eliminar configuración?
+                </h4>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                Esto eliminará completamente la configuración de GitHub para esta instancia. Esta acción no se puede deshacer.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDelete}
+                  disabled={loading}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Eliminando...' : 'Eliminar'}
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={loading}
+                  className="flex-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

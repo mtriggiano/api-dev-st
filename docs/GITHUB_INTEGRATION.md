@@ -15,7 +15,26 @@ Esta guía explica cómo usar la integración de GitHub para gestionar el contro
 
 ## 🔧 Requisitos
 
-### 1. Token de Acceso Personal de GitHub
+### 1. Git Instalado en el Servidor
+
+**CRÍTICO:** El servidor debe tener Git instalado y accesible en `/usr/bin/git`.
+
+```bash
+# Verificar instalación de Git
+which git
+git --version
+
+# Si no está instalado (Ubuntu/Debian):
+sudo apt update
+sudo apt install git -y
+
+# Verificar que esté en /usr/bin/git
+ls -la /usr/bin/git
+```
+
+⚠️ **Nota importante:** El sistema usa la ruta absoluta `/usr/bin/git` para evitar problemas con el PATH del proceso de Gunicorn. Si Git está instalado en otra ubicación, deberás modificar `backend/services/git_manager.py`.
+
+### 2. Token de Acceso Personal de GitHub
 
 Necesitas crear un Personal Access Token (PAT) en GitHub con los siguientes permisos:
 
@@ -201,6 +220,8 @@ curl -X POST https://api-dev.hospitalprivadosalta.ar/api/github/pull \
 | GET | `/api/github/config/:instance` | Obtiene configuración de una instancia |
 | POST | `/api/github/config` | Crea/actualiza configuración |
 | DELETE | `/api/github/config/:instance` | Elimina configuración |
+| POST | `/api/github/config/:instance/reset` | **NUEVO** Resetea completamente la configuración (limpia token) |
+| POST | `/api/github/config/:instance/reconfigure` | **NUEVO** Reconfigura con un nuevo token |
 
 ### Operaciones Git
 
@@ -295,6 +316,39 @@ curl -X POST https://api-dev.hospitalprivadosalta.ar/api/github/init-repo \
   -d '{"instance_name": "dev-mi-instancia"}'
 ```
 
+### Error: "[Errno 2] No such file or directory: 'git'"
+
+**Causa:** Git no está instalado o no está en la ruta esperada (`/usr/bin/git`).
+
+**Solución:**
+```bash
+# 1. Verificar si Git está instalado
+which git
+
+# 2. Si no está instalado, instalarlo
+sudo apt update
+sudo apt install git -y
+
+# 3. Verificar que esté en /usr/bin/git
+ls -la /usr/bin/git
+
+# 4. Reiniciar el servicio de API
+sudo systemctl restart server-panel-api
+
+# 5. Verificar logs
+sudo journalctl -u server-panel-api -n 50
+```
+
+⚠️ **Nota técnica:** El sistema usa `/usr/bin/git` como ruta absoluta porque el proceso de Gunicorn no hereda el PATH completo del sistema. Si Git está instalado en otra ubicación (ej: `/usr/local/bin/git`), deberás modificar la línea 28 de `backend/services/git_manager.py`:
+
+```python
+# Cambiar de:
+command[0] = '/usr/bin/git'
+
+# A tu ruta personalizada:
+command[0] = '/ruta/a/tu/git'
+```
+
 ### Error al hacer Push: "Authentication failed"
 
 **Causa:** El token no tiene permisos de escritura o ha expirado.
@@ -361,4 +415,5 @@ Si encuentras problemas:
 
 ---
 
-**Última actualización:** 2025-10-30
+**Última actualización:** 2025-11-12  
+**Versión:** 2.1 - Agregado soporte para PATH de Git y troubleshooting mejorado

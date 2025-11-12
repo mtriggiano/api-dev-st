@@ -231,6 +231,147 @@ def delete_config(instance_name):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+@github_bp.route('/config/<instance_name>/reset', methods=['POST'])
+@jwt_required()
+def reset_config(instance_name):
+    """Resetea completamente la configuración de GitHub para permitir revinculación
+    
+    Este endpoint:
+    1. Limpia el token de acceso existente
+    2. Marca la configuración como inactiva
+    3. Permite al usuario generar un nuevo token y reconfigurar
+    """
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    if user.role not in ['admin', 'developer']:
+        return jsonify({'error': 'Permisos insuficientes'}), 403
+    
+    try:
+        config = GitHubConfig.query.filter_by(
+            user_id=user_id,
+            instance_name=instance_name
+        ).first()
+        
+        if not config:
+            return jsonify({
+                'success': True,
+                'message': 'No existe configuración para resetear',
+                'action': 'create_new'
+            }), 200
+        
+        # Limpiar completamente la configuración
+        config.github_access_token = None
+        config.github_username = None
+        config.is_active = False
+        config.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        log_action(
+            user_id, 
+            'reset_github_config', 
+            instance_name, 
+            'Configuración reseteada - token limpiado', 
+            'success'
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Configuración reseteada exitosamente. Puedes generar un nuevo token y reconfigurar.',
+            'action': 'reconfigure',
+            'config': {
+                'instance_name': instance_name,
+                'repo_owner': config.repo_owner,
+                'repo_name': config.repo_name,
+                'repo_branch': config.repo_branch,
+                'local_path': config.local_path
+            }
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        log_action(user_id, 'reset_github_config', instance_name, str(e), 'error')
+        return jsonify({'error': str(e)}), 500
+
+@github_bp.route('/config/<instance_name>/reconfigure', methods=['POST'])
+@jwt_required()
+def reconfigure_config(instance_name):
+    """Reconfigura una integración existente con un nuevo token
+    
+    Permite actualizar el token de GitHub sin perder la configuración del repositorio.
+    Útil cuando el token expira o se revoca.
+    """
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    if user.role not in ['admin', 'developer']:
+        return jsonify({'error': 'Permisos insuficientes'}), 403
+    
+    data = request.get_json()
+    if not data or not data.get('github_token'):
+        return jsonify({'error': 'github_token requerido'}), 400
+    
+    try:
+        # Verificar que el token sea válido
+        verify_result = git_manager.verify_github_token(data['github_token'])
+        if not verify_result['success']:
+            return jsonify({
+                'success': False,
+                'error': 'Token de GitHub inválido',
+                'details': verify_result.get('error')
+            }), 400
+        
+        # Buscar configuración existente
+        config = GitHubConfig.query.filter_by(
+            user_id=user_id,
+            instance_name=instance_name
+        ).first()
+        
+        if not config:
+            return jsonify({
+                'success': False,
+                'error': 'No existe configuración para esta instancia. Usa el endpoint /config para crear una nueva.'
+            }), 404
+        
+        # Actualizar solo el token y reactivar
+        config.github_access_token = data['github_token']
+        config.github_username = verify_result['username']
+        config.is_active = True
+        config.updated_at = datetime.utcnow()
+        
+        # Opcionalmente actualizar otros campos si se proporcionan
+        if data.get('repo_owner'):
+            config.repo_owner = data['repo_owner']
+        if data.get('repo_name'):
+            config.repo_name = data['repo_name']
+        if data.get('repo_branch'):
+            config.repo_branch = data['repo_branch']
+        if data.get('local_path'):
+            if os.path.exists(data['local_path']):
+                config.local_path = data['local_path']
+            else:
+                return jsonify({'error': f"La ruta {data['local_path']} no existe"}), 400
+        
+        db.session.commit()
+        
+        log_action(
+            user_id,
+            'reconfigure_github_config',
+            instance_name,
+            f"Token actualizado - Usuario: {verify_result['username']}",
+            'success'
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Configuración actualizada exitosamente',
+            'config': config.to_dict()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        log_action(user_id, 'reconfigure_github_config', instance_name, str(e), 'error')
+        return jsonify({'error': str(e)}), 500
+
 @github_bp.route('/init-repo', methods=['POST'])
 @jwt_required()
 def init_repo():

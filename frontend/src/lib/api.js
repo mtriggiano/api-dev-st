@@ -186,6 +186,15 @@ export const github = {
   
   getDiff: (instanceName) => 
     api.get(`/api/github/diff/${instanceName}`),
+  
+  resetConfig: (instanceName) => 
+    api.post(`/api/github/config/${instanceName}/reset`),
+  
+  reconfigureConfig: (instanceName, data) => 
+    api.post(`/api/github/config/${instanceName}/reconfigure`, data),
+  
+  deleteConfig: (instanceName) => 
+    api.delete(`/api/github/config/${instanceName}`),
 };
 
 export default api;

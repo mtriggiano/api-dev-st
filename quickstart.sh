@@ -191,6 +191,19 @@ check_command "jq" || DEPS_OK=false
 check_command "node" || DEPS_OK=false
 check_command "npm" || DEPS_OK=false
 
+# Verificación especial para Git en /usr/bin/git (requerido para integración GitHub)
+if [ -f "/usr/bin/git" ]; then
+    print_success "Git está en /usr/bin/git (requerido para integración GitHub)"
+else
+    print_warning "Git NO está en /usr/bin/git"
+    print_info "La integración GitHub requiere Git en /usr/bin/git"
+    if command -v git &> /dev/null; then
+        GIT_PATH=$(which git)
+        print_info "Git encontrado en: $GIT_PATH"
+        print_info "Puedes crear un symlink: sudo ln -s $GIT_PATH /usr/bin/git"
+    fi
+fi
+
 if [ "$DEPS_OK" = false ]; then
     print_error "Faltan dependencias necesarias"
     echo ""
