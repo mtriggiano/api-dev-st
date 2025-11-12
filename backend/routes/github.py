@@ -2,8 +2,12 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, User, GitHubConfig, ActionLog
 from services.git_manager import GitManager
+from services.deploy_manager import deploy_manager
 from datetime import datetime
 import os
+import hmac
+import hashlib
+import secrets
 
 github_bp = Blueprint('github', __name__)
 git_manager = GitManager()
@@ -627,5 +631,323 @@ def get_diff(instance_name):
             return jsonify(result), 200
         else:
             return jsonify(result), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ========================================
+# WEBHOOK Y AUTO-DEPLOY
+# ========================================
+
+@github_bp.route('/webhook/config/<instance_name>', methods=['POST'])
+@jwt_required()
+def configure_webhook(instance_name):
+    """Configura el webhook para auto-deploy"""
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    if user.role not in ['admin']:
+        return jsonify({'error': 'Solo administradores pueden configurar webhooks'}), 403
+    
+    data = request.get_json()
+    
+    try:
+        config = GitHubConfig.query.filter_by(
+            instance_name=instance_name,
+            is_active=True
+        ).first()
+        
+        if not config:
+            return jsonify({'error': 'Configuración no encontrada'}), 404
+        
+        # Generar secret si no existe
+        if not config.webhook_secret:
+            config.webhook_secret = secrets.token_hex(32)
+        
+        # Actualizar configuración
+        config.auto_deploy = data.get('auto_deploy', False)
+        config.update_modules_on_deploy = data.get('update_modules', False)
+        
+        # Detectar tipo de instancia
+        if instance_name.startswith('dev-'):
+            config.instance_type = 'development'
+        else:
+            config.instance_type = 'production'
+            # Asegurar que producción use main
+            config.repo_branch = 'main'
+        
+        db.session.commit()
+        
+        # Construir URL del webhook
+        from flask import current_app
+        base_url = current_app.config.get('API_BASE_URL', 'https://api-dev.hospitalprivadosalta.ar')
+        webhook_url = f"{base_url}/api/github/webhook/{instance_name}"
+        
+        log_action(
+            user_id,
+            'configure_webhook',
+            instance_name,
+            f"Auto-deploy: {config.auto_deploy}, Update modules: {config.update_modules_on_deploy}",
+            'success'
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Webhook configurado exitosamente',
+            'webhook_url': webhook_url,
+            'webhook_secret': config.webhook_secret,
+            'config': config.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        log_action(user_id, 'configure_webhook', instance_name, str(e), 'error')
+        return jsonify({'error': str(e)}), 500
+
+
+@github_bp.route('/webhook/<instance_name>', methods=['POST'])
+def webhook_receiver(instance_name):
+    """Recibe webhooks de GitHub y ejecuta auto-deploy"""
+    try:
+        # Obtener configuración
+        config = GitHubConfig.query.filter_by(
+            instance_name=instance_name,
+            is_active=True,
+            auto_deploy=True
+        ).first()
+        
+        if not config:
+            return jsonify({
+                'error': 'Configuración no encontrada o auto-deploy deshabilitado'
+            }), 404
+        
+        # Verificar signature de GitHub
+        signature = request.headers.get('X-Hub-Signature-256')
+        if not signature:
+            return jsonify({'error': 'Signature no proporcionada'}), 401
+        
+        # Validar signature
+        payload = request.get_data()
+        expected_signature = 'sha256=' + hmac.new(
+            config.webhook_secret.encode(),
+            payload,
+            hashlib.sha256
+        ).hexdigest()
+        
+        if not hmac.compare_digest(signature, expected_signature):
+            return jsonify({'error': 'Signature inválida'}), 401
+        
+        # Parsear payload según Content-Type
+        content_type = request.headers.get('Content-Type', '')
+        if 'application/json' in content_type:
+            data = request.get_json()
+        elif 'application/x-www-form-urlencoded' in content_type:
+            import json
+            payload_str = request.form.get('payload', '{}')
+            data = json.loads(payload_str)
+        else:
+            return jsonify({'error': 'Content-Type no soportado'}), 415
+        
+        # Verificar que es un push event
+        event_type = request.headers.get('X-GitHub-Event')
+        
+        # Responder OK a ping events
+        if event_type == 'ping':
+            return jsonify({'message': 'Pong! Webhook configurado correctamente'}), 200
+        
+        if event_type != 'push':
+            return jsonify({
+                'message': 'Evento ignorado (solo se procesan push events)'
+            }), 200
+        
+        # Verificar que es la rama correcta
+        ref = data.get('ref', '')
+        branch = ref.replace('refs/heads/', '')
+        
+        if branch != config.repo_branch:
+            return jsonify({
+                'message': f'Rama ignorada (esperada: {config.repo_branch}, recibida: {branch})'
+            }), 200
+        
+        # Extraer información del commit
+        commits = data.get('commits', [])
+        commit_info = {
+            'branch': branch,
+            'commits_count': len(commits),
+            'pusher': data.get('pusher', {}).get('name'),
+            'repository': data.get('repository', {}).get('full_name')
+        }
+        
+        if commits:
+            last_commit = commits[-1]
+            commit_info['last_commit'] = {
+                'id': last_commit.get('id'),
+                'message': last_commit.get('message'),
+                'author': last_commit.get('author', {}).get('name'),
+                'timestamp': last_commit.get('timestamp')
+            }
+        
+        # Ejecutar auto-deploy
+        deploy_result = deploy_manager.auto_deploy(config, commit_info)
+        
+        # Actualizar timestamp de último deploy
+        if deploy_result['success']:
+            config.last_deploy_at = datetime.utcnow()
+            db.session.commit()
+        
+        # Log de la acción
+        log_action(
+            config.user_id,
+            'webhook_autodeploy',
+            instance_name,
+            f"Deploy {'exitoso' if deploy_result['success'] else 'fallido'}: {commit_info.get('last_commit', {}).get('message', 'N/A')}",
+            'success' if deploy_result['success'] else 'error'
+        )
+        
+        return jsonify({
+            'success': deploy_result['success'],
+            'message': deploy_result.get('message', 'Deploy procesado'),
+            'commit_info': commit_info,
+            'deploy_result': deploy_result
+        }), 200 if deploy_result['success'] else 500
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@github_bp.route('/webhook/test/<instance_name>', methods=['POST'])
+@jwt_required()
+def test_webhook(instance_name):
+    """Prueba el webhook manualmente"""
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    if user.role not in ['admin', 'developer']:
+        return jsonify({'error': 'Permisos insuficientes'}), 403
+    
+    try:
+        config = GitHubConfig.query.filter_by(
+            instance_name=instance_name,
+            is_active=True
+        ).first()
+        
+        if not config:
+            return jsonify({'error': 'Configuración no encontrada'}), 404
+        
+        # Simular commit info
+        commit_info = {
+            'branch': config.repo_branch,
+            'commits_count': 1,
+            'pusher': user.username,
+            'repository': f"{config.repo_owner}/{config.repo_name}",
+            'test': True
+        }
+        
+        # Ejecutar deploy
+        deploy_result = deploy_manager.auto_deploy(config, commit_info)
+        
+        # Actualizar timestamp si fue exitoso
+        if deploy_result['success']:
+            config.last_deploy_at = datetime.utcnow()
+            db.session.commit()
+        
+        log_action(
+            user_id,
+            'test_webhook',
+            instance_name,
+            f"Test deploy {'exitoso' if deploy_result['success'] else 'fallido'}",
+            'success' if deploy_result['success'] else 'error'
+        )
+        
+        return jsonify({
+            'success': deploy_result['success'],
+            'message': 'Test completado',
+            'deploy_result': deploy_result
+        }), 200
+        
+    except Exception as e:
+        log_action(user_id, 'test_webhook', instance_name, str(e), 'error')
+        return jsonify({'error': str(e)}), 500
+
+
+@github_bp.route('/current-commit/<instance_name>', methods=['GET'])
+@jwt_required()
+def get_current_commit(instance_name):
+    """Obtiene información del commit actual"""
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    if user.role not in ['admin', 'developer', 'viewer']:
+        return jsonify({'error': 'Permisos insuficientes'}), 403
+    
+    try:
+        config = GitHubConfig.query.filter_by(
+            instance_name=instance_name,
+            is_active=True
+        ).first()
+        
+        if not config:
+            return jsonify({'error': 'Configuración no encontrada'}), 404
+        
+        # Obtener información del commit actual
+        result = git_manager.get_commit_history(config.local_path, limit=1)
+        
+        if result['success'] and result['commits']:
+            current_commit = result['commits'][0]
+            return jsonify({
+                'success': True,
+                'commit': {
+                    'hash': current_commit['hash'],
+                    'short_hash': current_commit['hash'][:7],
+                    'message': current_commit['message'],
+                    'author': current_commit['author'],
+                    'date': current_commit['date'],
+                    'branch': config.repo_branch
+                },
+                'last_deploy': config.last_deploy_at.isoformat() if config.last_deploy_at else None
+            }), 200
+        else:
+            return jsonify({'error': 'No se pudo obtener información del commit'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@github_bp.route('/deploy-logs/<instance_name>', methods=['GET'])
+@jwt_required()
+def get_deploy_logs(instance_name):
+    """Obtiene los logs de deploy/webhook de una instancia"""
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    if user.role not in ['admin', 'developer', 'viewer']:
+        return jsonify({'error': 'Permisos insuficientes'}), 403
+    
+    try:
+        limit = request.args.get('limit', 50, type=int)
+        
+        # Obtener logs relacionados con Git/Deploy
+        logs = ActionLog.query.filter(
+            ActionLog.instance_name == instance_name,
+            ActionLog.action.in_([
+                'webhook_autodeploy',
+                'test_webhook',
+                'git_pull',
+                'git_push',
+                'git_commit'
+            ])
+        ).order_by(ActionLog.timestamp.desc()).limit(limit).all()
+        
+        return jsonify({
+            'success': True,
+            'logs': [{
+                'id': log.id,
+                'action': log.action,
+                'details': log.details,
+                'status': log.status,
+                'timestamp': log.timestamp.isoformat(),
+                'user': log.user.username if log.user else 'System'
+            } for log in logs]
+        }), 200
+        
     except Exception as e:
         return jsonify({'error': str(e)}), 500

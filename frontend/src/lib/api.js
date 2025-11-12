@@ -195,6 +195,20 @@ export const github = {
   
   deleteConfig: (instanceName) => 
     api.delete(`/api/github/config/${instanceName}`),
+  
+  // Webhook endpoints
+  configureWebhook: (instanceName, config) => 
+    api.post(`/api/github/webhook/config/${instanceName}`, config),
+  
+  testWebhook: (instanceName) => 
+    api.post(`/api/github/webhook/test/${instanceName}`),
+  
+  // Nuevos endpoints
+  getCurrentCommit: (instanceName) => 
+    api.get(`/api/github/current-commit/${instanceName}`),
+  
+  getDeployLogs: (instanceName, limit = 50) => 
+    api.get(`/api/github/deploy-logs/${instanceName}?limit=${limit}`),
 };
 
 export default api;

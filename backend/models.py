@@ -73,10 +73,17 @@ class GitHubConfig(db.Model):
     # Local path
     local_path = db.Column(db.String(500))  # Ruta a la carpeta custom addons
     
+    # Instance type and deployment
+    instance_type = db.Column(db.String(20), default='development')  # 'development' o 'production'
+    auto_deploy = db.Column(db.Boolean, default=False)  # Auto-deploy en push a main
+    webhook_secret = db.Column(db.String(100))  # Secret para validar webhook
+    update_modules_on_deploy = db.Column(db.Boolean, default=False)  # Actualizar módulos Odoo
+    
     # Metadata
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
+    last_deploy_at = db.Column(db.DateTime)  # Último deploy automático
     
     user = db.relationship('User', backref='github_configs')
     
@@ -94,11 +101,27 @@ class GitHubConfig(db.Model):
             'repo_name': self.repo_name,
             'repo_branch': self.repo_branch,
             'local_path': self.local_path,
+            'instance_type': self.instance_type,
+            'auto_deploy': self.auto_deploy,
+            'update_modules_on_deploy': self.update_modules_on_deploy,
+            'has_webhook': bool(self.webhook_secret),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'last_deploy_at': self.last_deploy_at.isoformat() if self.last_deploy_at else None,
             'is_active': self.is_active,
             'has_token': bool(self.github_access_token)
         }
+    
+    def is_production(self):
+        """Verifica si la instancia es de producción"""
+        return self.instance_type == 'production' or not self.instance_name.startswith('dev-')
+    
+    def get_default_branch(self):
+        """Retorna la rama por defecto según el tipo de instancia"""
+        if self.is_production():
+            return 'main'
+        else:
+            return self.instance_name  # dev-mtg, dev-test, etc.
 
 class MetricsHistory(db.Model):
     __tablename__ = 'metrics_history'

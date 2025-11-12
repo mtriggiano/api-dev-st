@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Github, CheckCircle, XCircle, Loader, AlertCircle, ChevronDown, ChevronUp, ExternalLink, RefreshCw, Trash2 } from 'lucide-react';
+import { Github, CheckCircle, XCircle, Loader, AlertCircle, ChevronDown, ChevronUp, ExternalLink, RefreshCw, Trash2, Webhook, Copy, TestTube } from 'lucide-react';
 import { github } from '../lib/api';
 
 export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }) {
-  const [step, setStep] = useState('input'); // input, verifying, configuring, success, error, git-actions, reconfigure
+  const [step, setStep] = useState('input'); // input, verifying, configuring, success, error, git-actions, reconfigure, webhook
   const [githubToken, setGithubToken] = useState('');
   const [repoUrl, setRepoUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,6 +17,16 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
   const [showInstructions, setShowInstructions] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  // Webhook states
+  const [showWebhookConfig, setShowWebhookConfig] = useState(false);
+  const [webhookConfig, setWebhookConfig] = useState({
+    auto_deploy: false,
+    update_modules: false
+  });
+  const [webhookInfo, setWebhookInfo] = useState(null);
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [copiedSecret, setCopiedSecret] = useState(false);
 
   useEffect(() => {
     if (isOpen && instanceName) {
@@ -158,13 +168,18 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
       setStep('configuring');
 
       // 2. Crear configuración
+      // Detectar si es producción o desarrollo
+      const isProduction = !instanceName.startsWith('dev-');
+      const basePath = isProduction ? '/home/go/apps/production/odoo' : '/home/go/apps/develop/odoo';
+      const branch = isProduction ? 'main' : instanceName;
+      
       const configData = {
         instance_name: instanceName,
         github_token: cleanToken,
         repo_owner: repo.owner,
         repo_name: repo.name,
-        repo_branch: instanceName, // Usar el nombre de la instancia como rama
-        local_path: `/home/go/apps/develop/odoo/${instanceName}/custom_addons`
+        repo_branch: branch,
+        local_path: `${basePath}/${instanceName}/custom_addons`
       };
 
       const configResponse = await github.createConfig(configData);
@@ -283,7 +298,68 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
     setExistingConfig(null);
     setShowResetConfirm(false);
     setShowDeleteConfirm(false);
+    setShowWebhookConfig(false);
+    setWebhookInfo(null);
     onClose();
+  };
+
+  const handleConfigureWebhook = async () => {
+    setLoading(true);
+    setError('');
+    setGitSuccess('');
+    
+    try {
+      const response = await github.configureWebhook(instanceName, webhookConfig);
+      if (response.data.success) {
+        setWebhookInfo(response.data);
+        setGitSuccess('Webhook configurado exitosamente');
+        // Actualizar config existente
+        setExistingConfig({
+          ...existingConfig,
+          auto_deploy: webhookConfig.auto_deploy,
+          update_modules_on_deploy: webhookConfig.update_modules,
+          has_webhook: true
+        });
+      } else {
+        setError(response.data.error || 'Error al configurar webhook');
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al configurar webhook');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTestWebhook = async () => {
+    setGitLoading(true);
+    setError('');
+    setGitSuccess('');
+    
+    try {
+      const response = await github.testWebhook(instanceName);
+      if (response.data.success) {
+        setGitSuccess('Test de webhook completado exitosamente');
+        // Recargar estado
+        loadGitStatus();
+      } else {
+        setError(response.data.error || 'Error en test de webhook');
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error en test de webhook');
+    } finally {
+      setGitLoading(false);
+    }
+  };
+
+  const copyToClipboard = (text, type) => {
+    navigator.clipboard.writeText(text);
+    if (type === 'url') {
+      setCopiedWebhook(true);
+      setTimeout(() => setCopiedWebhook(false), 2000);
+    } else {
+      setCopiedSecret(true);
+      setTimeout(() => setCopiedSecret(false), 2000);
+    }
   };
 
   if (!isOpen) return null;
@@ -427,6 +503,16 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
 
             {/* Botones de gestión */}
             <div className="border-t border-gray-200 dark:border-gray-600 pt-4 mt-4 space-y-2">
+              {/* Botón Webhook */}
+              <button
+                onClick={() => setShowWebhookConfig(!showWebhookConfig)}
+                disabled={loading}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Webhook className="w-4 h-4" />
+                {existingConfig?.has_webhook ? 'Configurar Webhook' : 'Habilitar Webhook'}
+              </button>
+
               <button
                 onClick={() => setShowResetConfirm(true)}
                 disabled={loading}
@@ -444,6 +530,128 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
                 Eliminar Configuración
               </button>
             </div>
+
+            {/* Configuración de Webhook */}
+            {showWebhookConfig && (
+              <div className="border-t border-gray-200 dark:border-gray-600 pt-4 mt-4 space-y-4">
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-indigo-900 dark:text-indigo-100 mb-3 flex items-center gap-2">
+                    <Webhook className="w-4 h-4" />
+                    Configuración de Webhook
+                  </h4>
+                  
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={webhookConfig.auto_deploy}
+                        onChange={(e) => setWebhookConfig({...webhookConfig, auto_deploy: e.target.checked})}
+                        className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        Auto-deploy en push a main
+                      </span>
+                    </label>
+                    
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={webhookConfig.update_modules}
+                        onChange={(e) => setWebhookConfig({...webhookConfig, update_modules: e.target.checked})}
+                        className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        Actualizar módulos Odoo automáticamente
+                      </span>
+                    </label>
+                  </div>
+
+                  <button
+                    onClick={handleConfigureWebhook}
+                    disabled={loading}
+                    className="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader className="w-4 h-4 animate-spin" />
+                        Configurando...
+                      </>
+                    ) : (
+                      'Guardar Configuración'
+                    )}
+                  </button>
+
+                  {/* Información del webhook */}
+                  {webhookInfo && (
+                    <div className="mt-4 space-y-3 pt-3 border-t border-indigo-200 dark:border-indigo-700">
+                      <div>
+                        <label className="block text-xs font-medium text-indigo-900 dark:text-indigo-100 mb-1">
+                          URL del Webhook
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={webhookInfo.webhook_url}
+                            readOnly
+                            className="flex-1 px-3 py-2 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white"
+                          />
+                          <button
+                            onClick={() => copyToClipboard(webhookInfo.webhook_url, 'url')}
+                            className="px-3 py-2 bg-indigo-100 dark:bg-indigo-900/50 hover:bg-indigo-200 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-lg transition-colors"
+                          >
+                            {copiedWebhook ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-indigo-900 dark:text-indigo-100 mb-1">
+                          Secret
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="password"
+                            value={webhookInfo.webhook_secret}
+                            readOnly
+                            className="flex-1 px-3 py-2 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white"
+                          />
+                          <button
+                            onClick={() => copyToClipboard(webhookInfo.webhook_secret, 'secret')}
+                            className="px-3 py-2 bg-indigo-100 dark:bg-indigo-900/50 hover:bg-indigo-200 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-lg transition-colors"
+                          >
+                            {copiedSecret ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3">
+                        <p className="text-xs text-blue-800 dark:text-blue-200">
+                          <strong>Próximo paso:</strong> Configura el webhook en GitHub → Settings → Webhooks → Add webhook
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={handleTestWebhook}
+                        disabled={gitLoading}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {gitLoading ? (
+                          <>
+                            <Loader className="w-4 h-4 animate-spin" />
+                            Probando...
+                          </>
+                        ) : (
+                          <>
+                            <TestTube className="w-4 h-4" />
+                            Probar Webhook
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Botón Cerrar */}
             <button
@@ -572,8 +780,11 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
               <p className="text-sm text-blue-800 dark:text-blue-200 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <span>
-                  Se creará automáticamente una rama llamada <strong>{instanceName}</strong> en tu repositorio
-                  y se conectará la carpeta custom_addons.
+                  {instanceName.startsWith('dev-') ? (
+                    <>Se creará automáticamente una rama llamada <strong>{instanceName}</strong> en tu repositorio y se conectará la carpeta custom_addons.</>
+                  ) : (
+                    <>Se conectará a la rama <strong>main</strong> de tu repositorio y se sincronizará con la carpeta custom_addons de producción.</>
+                  )}
                 </span>
               </p>
             </div>

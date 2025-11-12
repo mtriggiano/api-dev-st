@@ -7,6 +7,104 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [2.3.0] - 2025-11-12
+
+### ✨ Agregado (NUEVO)
+- **Monitoreo de Commits en UI**
+  - Badge con hash del commit actual debajo del botón GitHub
+  - Tooltip con mensaje completo del commit
+  - Actualización automática al cargar la página
+  - Endpoint `GET /api/github/current-commit/<instance>`
+
+- **Logs de Git/Deploy en Panel**
+  - Nueva pestaña "Git/Deploy" en modal de logs
+  - Historial completo de deploys automáticos y manuales
+  - Formato: `[Fecha] ✅/❌ Acción: Detalles (Usuario)`
+  - Endpoint `GET /api/github/deploy-logs/<instance>`
+  - Incluye: webhooks, tests, git pull/push/commit
+
+- **Soporte para Content-Type de GitHub**
+  - Webhook acepta `application/json` y `application/x-www-form-urlencoded`
+  - Respuesta automática a eventos `ping` de GitHub
+  - Parsing correcto del payload según Content-Type
+
+### 🔧 Corregido
+- **DeployManager**: Rutas absolutas para comandos sudo y systemctl
+  - Cambiado `sudo` → `/usr/bin/sudo`
+  - Cambiado `systemctl` → `/usr/bin/systemctl`
+  - Corregida ruta de producción: `/home/go/apps/production/odoo/`
+  - Corregida ruta de odoo-bin: incluye `/odoo-server/`
+  - Usuario correcto para ejecutar comandos: `go` (no `odoo`)
+
+- **Frontend**: Botón de GitHub visible en todas las instancias
+  - Removida restricción `!isProduction`
+  - Agregada prop `onGitHub` a instancias de producción
+
+### 📚 Documentación
+- **GITHUB_INTEGRATION.md** - Actualizado con sección de Webhooks y Auto-Deploy
+  - Guía completa de configuración de webhooks
+  - Cómo monitorear commits y deploys
+  - Endpoints de webhook documentados
+  - Seguridad y validación explicada
+
+- **GITHUB_IMPROVEMENTS.md** - Nuevo documento con mejoras implementadas
+  - Resumen de funcionalidades
+  - Guía de monitoreo de deploys
+  - Comandos de debugging
+  - Próximos pasos sugeridos
+
+---
+
+## [2.2.0] - 2025-11-12
+
+### ✨ Agregado (MAYOR)
+- **Sistema de Webhooks de GitHub para Auto-Deploy**
+  - Webhook endpoint que recibe notificaciones de GitHub
+  - Auto-deploy en push/merge a rama main (producción)
+  - Validación de signature HMAC-SHA256
+  - Actualización automática de módulos Odoo (opcional)
+  - Reinicio automático de servicios
+  
+- **Detección Automática de Tipo de Instancia**
+  - Desarrollo: Instancias que empiezan con `dev-` usan su nombre como rama
+  - Producción: Instancias sin `dev-` usan rama `main`
+  - Campo `instance_type` en modelo GitHubConfig
+  
+- **Nuevos Campos en GitHubConfig**
+  - `instance_type`: 'development' o 'production'
+  - `auto_deploy`: Habilitar/deshabilitar auto-deploy
+  - `webhook_secret`: Secret para validar webhooks
+  - `update_modules_on_deploy`: Actualizar módulos en deploy
+  - `last_deploy_at`: Timestamp del último deploy
+
+- **Nuevos Endpoints API**
+  - `POST /api/github/webhook/config/<instance>` - Configurar webhook
+  - `POST /api/github/webhook/<instance>` - Recibir webhook de GitHub
+  - `POST /api/github/webhook/test/<instance>` - Probar webhook manualmente
+  - `GET /api/github/current-commit/<instance>` - Obtener commit actual
+  - `GET /api/github/deploy-logs/<instance>` - Obtener logs de deploy
+
+- **DeployManager Service**
+  - Servicio para gestionar deploys automáticos
+  - Pull de cambios con autenticación
+  - Actualización de módulos Odoo
+  - Reinicio de servicios
+  - Logging completo de operaciones
+
+### 📚 Documentación
+- **GITHUB_WEBHOOK.md** - Documentación completa del sistema de webhooks
+  - Guía de configuración paso a paso
+  - Ejemplos de uso
+  - Troubleshooting detallado
+  - Mejores prácticas de seguridad
+
+### 🔄 Migración
+- Script de migración `add_webhook_fields.py`
+- Actualización automática de instancias existentes
+- Detección de tipo basada en nombre de instancia
+
+---
+
 ## [2.1.0] - 2025-11-12
 
 ### 🔧 Corregido (CRÍTICO)

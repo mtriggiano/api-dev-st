@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { instances } from '../lib/api';
-import { Server, Play, Square, Trash2, RefreshCw, Database, FileText, Plus, Eye, AlertCircle, FolderSync, Palette, Github } from 'lucide-react';
+import { instances, github } from '../lib/api';
+import { Server, Play, Square, Trash2, RefreshCw, Database, FileText, Plus, Eye, AlertCircle, FolderSync, Palette, Github, GitCommit, Clock } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import Toast from './Toast';
 import GitHubModal from './GitHubModal';
@@ -176,8 +176,24 @@ export default function Instances() {
     setLogsLoading(true);
     setLogs('Cargando logs...');
     try {
-      const response = await instances.getLogs(instanceName, 200, logType);
-      setLogs(response.data.logs);
+      if (logType === 'git-deploy') {
+        // Logs de Git/Deploy
+        const response = await github.getDeployLogs(instanceName, 50);
+        if (response.data.success && response.data.logs.length > 0) {
+          const formattedLogs = response.data.logs.map(log => {
+            const timestamp = new Date(log.timestamp).toLocaleString('es-AR');
+            const status = log.status === 'success' ? '✅' : '❌';
+            return `[${timestamp}] ${status} ${log.action}: ${log.details} (${log.user})`;
+          }).join('\n');
+          setLogs(formattedLogs);
+        } else {
+          setLogs('No hay logs de deploy disponibles');
+        }
+      } else {
+        // Logs normales (systemd, odoo, nginx)
+        const response = await instances.getLogs(instanceName, 200, logType);
+        setLogs(response.data.logs);
+      }
     } catch (error) {
       setLogs('Error al cargar logs: ' + (error.response?.data?.error || error.message));
     } finally {
@@ -235,6 +251,7 @@ export default function Instances() {
                   instance={instance}
                   onAction={showConfirmation}
                   onViewLogs={handleViewLogs}
+                  onGitHub={(instanceName) => setGithubModal({ show: true, instanceName })}
                   actionLoading={actionLoading}
                   isProduction={true}
                 />
@@ -442,6 +459,16 @@ export default function Instances() {
               >
                 Nginx Error
               </button>
+              <button
+                onClick={() => handleLogTabChange('git-deploy')}
+                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                  activeLogTab === 'git-deploy'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                }`}
+              >
+                Git/Deploy
+              </button>
             </div>
             
             {/* Contenido del log */}
@@ -524,20 +551,52 @@ function getConfirmMessage(action, instanceName) {
 function InstanceCard({ instance, onAction, onViewLogs, onGitHub, actionLoading, isProduction }) {
   const statusColor = instance.status === 'active' ? 'text-green-600' : 'text-red-600';
   const statusBg = instance.status === 'active' ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900';
+  const [currentCommit, setCurrentCommit] = useState(null);
+  const [loadingCommit, setLoadingCommit] = useState(false);
+
+  // Cargar commit actual cuando el componente se monta
+  useEffect(() => {
+    loadCurrentCommit();
+  }, [instance.name]);
+
+  const loadCurrentCommit = async () => {
+    setLoadingCommit(true);
+    try {
+      const response = await github.getCurrentCommit(instance.name);
+      if (response.data.success) {
+        setCurrentCommit(response.data.commit);
+      }
+    } catch (error) {
+      // Silenciosamente fallar si no hay config de Git
+      console.log('No Git config for', instance.name);
+    } finally {
+      setLoadingCommit(false);
+    }
+  };
 
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow relative">
-      {/* Botón GitHub en esquina superior derecha - solo para dev */}
-      {!isProduction && (
+      {/* Botón GitHub en esquina superior derecha - para todas las instancias */}
+      <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
         <button
           onClick={() => onGitHub(instance.name)}
           title="Conectar con GitHub para control de versiones"
-          className="absolute top-4 right-4 flex items-center gap-2 px-3 py-1.5 text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors border border-gray-300 dark:border-gray-600"
+          className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors border border-gray-300 dark:border-gray-600"
         >
           <Github className="w-4 h-4" />
           <span className="hidden sm:inline">GitHub</span>
         </button>
-      )}
+        
+        {/* Mostrar commit actual si existe */}
+        {currentCommit && (
+          <div className="flex items-center gap-2 px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600">
+            <GitCommit className="w-3 h-3 text-gray-600 dark:text-gray-400" />
+            <span className="font-mono text-gray-700 dark:text-gray-300" title={currentCommit.message}>
+              {currentCommit.short_hash}
+            </span>
+          </div>
+        )}
+      </div>
       
       {/* Header con info */}
       <div className="flex items-start gap-3 mb-4 pr-24">

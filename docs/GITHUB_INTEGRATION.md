@@ -415,5 +415,85 @@ Si encuentras problemas:
 
 ---
 
+## 🚀 Webhooks y Auto-Deploy (Nuevo)
+
+### Configuración de Webhooks para Producción
+
+Las instancias de producción pueden configurarse para recibir webhooks de GitHub y hacer auto-deploy automáticamente cuando se hace push a la rama `main`.
+
+#### Configurar Webhook
+
+1. **Desde el Panel Web**:
+   - Ve a la instancia de producción
+   - Click en el botón **GitHub**
+   - Si ya está conectado, verás la opción **"Configurar Webhook"**
+   - Activa **"Auto-deploy en push a main"**
+   - Opcionalmente activa **"Actualizar módulos Odoo automáticamente"**
+   - Click en **"Guardar Configuración"**
+
+2. **Copiar URL y Secret del Webhook**:
+   - Después de guardar, verás:
+     - **Webhook URL**: `https://tu-dominio.ar/api/github/webhook/production`
+     - **Webhook Secret**: Un token secreto generado automáticamente
+   - Usa los botones de copiar para copiar cada valor
+
+3. **Configurar en GitHub**:
+   - Ve a tu repositorio en GitHub
+   - **Settings** → **Webhooks** → **Add webhook**
+   - **Payload URL**: Pega la URL del webhook
+   - **Content type**: Selecciona `application/x-www-form-urlencoded` o `application/json`
+   - **Secret**: Pega el secret del webhook
+   - **Which events**: Selecciona "Just the push event"
+   - **Active**: ✅ Marcado
+   - Click en **Add webhook**
+
+4. **Probar el Webhook**:
+   - En el panel, click en **"Probar Webhook"**
+   - Verifica que el deploy se ejecute correctamente
+   - En GitHub, ve a **Settings** → **Webhooks** → Click en tu webhook
+   - En **Recent Deliveries** verás el evento `ping` con status 200
+
+#### Cómo Funciona el Auto-Deploy
+
+Cuando haces push a `main`:
+
+1. **GitHub envía webhook** → Tu servidor
+2. **Validación de signature** → Verifica que viene de GitHub
+3. **Git pull** → Descarga los cambios
+4. **Actualizar módulos** (opcional) → Detiene Odoo, actualiza módulos, reinicia
+5. **Log del deploy** → Se guarda en la base de datos
+
+#### Ver Logs de Deploy
+
+1. Ve a la instancia → Click en **"Logs"**
+2. Selecciona la pestaña **"Git/Deploy"**
+3. Verás el historial completo:
+   ```
+   [12/11/2025 23:05:00] ✅ webhook_autodeploy: Deploy exitoso: Fix bug en módulo X (System)
+   [12/11/2025 22:30:00] ✅ test_webhook: Test deploy exitoso (admin)
+   ```
+
+#### Monitorear Commit Actual
+
+Debajo del botón de GitHub en cada instancia verás un badge con el hash del commit actual:
+- **Hash corto**: `a1b2c3d`
+- **Tooltip**: Mensaje completo del commit
+
+#### Endpoints de Webhook
+
+- **POST** `/api/github/webhook/config/<instance_name>` - Configurar webhook
+- **POST** `/api/github/webhook/<instance_name>` - Recibir webhook de GitHub
+- **POST** `/api/github/webhook/test/<instance_name>` - Probar webhook manualmente
+- **GET** `/api/github/current-commit/<instance_name>` - Obtener commit actual
+- **GET** `/api/github/deploy-logs/<instance_name>` - Obtener logs de deploy
+
+#### Seguridad
+
+- **HMAC SHA256**: Todos los webhooks se validan con signature
+- **Secret único**: Cada instancia tiene su propio secret
+- **Logs auditables**: Todos los deploys se registran con usuario y timestamp
+
+---
+
 **Última actualización:** 2025-11-12  
-**Versión:** 2.1 - Agregado soporte para PATH de Git y troubleshooting mejorado
+**Versión:** 3.0 - Agregado soporte para webhooks, auto-deploy, y monitoreo de commits

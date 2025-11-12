@@ -98,7 +98,17 @@ source scripts/utils/validate-env.sh --full
 - **Diff**: Visualizar diferencias en archivos
 - **Gestión por instancia**: Cada desarrollador su repo
 
-👉 **Ver documentación completa:** [GITHUB_INTEGRATION.md](GITHUB_INTEGRATION.md)
+👉 **Ver documentación completa:** [GITHUB_INTEGRATION.md](docs/GITHUB_INTEGRATION.md)
+
+### Webhooks y Auto-Deploy 🔔 (Nuevo)
+- **Webhooks de GitHub**: Recibe notificaciones en push/merge
+- **Auto-deploy producción**: Deploy automático en push a main
+- **Actualización de módulos**: Actualiza módulos Odoo automáticamente
+- **Detección automática**: Desarrollo usa rama por instancia, producción usa main
+- **Validación segura**: Verificación HMAC-SHA256 de webhooks
+- **Logs completos**: Auditoría de todos los deploys
+
+👉 **Ver documentación completa:** [GITHUB_WEBHOOK.md](docs/GITHUB_WEBHOOK.md)
 
 ## 📁 Estructura del Proyecto (Refactorizada)
 
