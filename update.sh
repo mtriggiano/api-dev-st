@@ -1,0 +1,339 @@
+#!/bin/bash
+
+# ========================================
+# UPDATE - Script de Actualización API-DEV
+# ========================================
+# Este script actualiza una instalación existente de API-DEV
+# NO usar en instalaciones nuevas (usar quickstart.sh)
+
+set -e
+
+# Colores para output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+NC='\033[0m' # No Color
+
+# Configuración
+PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+BACKUP_DIR="/tmp/api-dev-backup-$(date +%Y%m%d_%H%M%S)"
+
+# ========================================
+# FUNCIONES AUXILIARES
+# ========================================
+
+print_header() {
+    echo ""
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${WHITE}$1${NC}"
+    echo -e "${CYAN}========================================${NC}"
+}
+
+print_section() {
+    echo ""
+    echo -e "${YELLOW}► $1${NC}"
+    echo -e "${CYAN}----------------------------------------${NC}"
+}
+
+print_success() {
+    echo -e "${GREEN}✅ $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}❌ $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
+
+print_info() {
+    echo -e "${BLUE}ℹ️  $1${NC}"
+}
+
+# ========================================
+# VERIFICACIONES PREVIAS
+# ========================================
+
+print_header "API-DEV - Script de Actualización"
+
+# Verificar que estamos en el directorio correcto
+if [ ! -f "$PROJECT_ROOT/.env" ]; then
+    print_error "No se encontró el archivo .env"
+    print_info "Este script debe ejecutarse desde el directorio raíz de API-DEV"
+    exit 1
+fi
+
+# Verificar que el servicio existe
+if ! systemctl list-unit-files | grep -q "server-panel-api.service"; then
+    print_error "El servicio server-panel-api no está instalado"
+    print_info "Este script es solo para actualizar instalaciones existentes"
+    exit 1
+fi
+
+print_success "Instalación existente detectada"
+
+# ========================================
+# PASO 1: BACKUP DE SEGURIDAD
+# ========================================
+
+print_header "PASO 1: Backup de Seguridad"
+
+mkdir -p "$BACKUP_DIR"
+
+# Backup del .env
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    cp "$PROJECT_ROOT/.env" "$BACKUP_DIR/.env"
+    print_success "Backup de .env creado"
+fi
+
+# Backup de la base de datos
+print_info "Creando backup de la base de datos..."
+DB_NAME=$(grep "^DATABASE_URL" "$PROJECT_ROOT/.env" | cut -d'/' -f4 | cut -d'?' -f1)
+if [ ! -z "$DB_NAME" ]; then
+    pg_dump "$DB_NAME" > "$BACKUP_DIR/database.sql" 2>/dev/null || print_warning "No se pudo hacer backup de la BD"
+    if [ -f "$BACKUP_DIR/database.sql" ]; then
+        print_success "Backup de base de datos creado"
+    fi
+fi
+
+print_info "Backups guardados en: $BACKUP_DIR"
+
+# ========================================
+# PASO 2: OBTENER CAMBIOS DE GIT
+# ========================================
+
+print_header "PASO 2: Actualizar Código desde Git"
+
+cd "$PROJECT_ROOT"
+
+# Verificar estado de Git
+if [ -n "$(git status --porcelain)" ]; then
+    print_warning "Hay cambios locales sin commitear"
+    echo ""
+    git status --short
+    echo ""
+    read -p "¿Descartar cambios locales y continuar? (s/n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Ss]$ ]]; then
+        git reset --hard
+        print_info "Cambios locales descartados"
+    else
+        print_error "Actualización cancelada"
+        exit 1
+    fi
+fi
+
+# Obtener rama actual
+CURRENT_BRANCH=$(git branch --show-current)
+print_info "Rama actual: $CURRENT_BRANCH"
+
+# Pull de cambios
+print_info "Descargando cambios..."
+if git pull origin "$CURRENT_BRANCH"; then
+    print_success "Código actualizado desde Git"
+else
+    print_error "Error al hacer pull desde Git"
+    exit 1
+fi
+
+# Mostrar últimos commits
+echo ""
+print_info "Últimos cambios:"
+git log --oneline -5 --color=always
+
+# ========================================
+# PASO 3: ACTUALIZAR BACKEND
+# ========================================
+
+print_header "PASO 3: Actualizar Backend"
+
+cd "$PROJECT_ROOT/backend"
+
+# Activar entorno virtual
+if [ -d "venv" ]; then
+    print_info "Activando entorno virtual..."
+    source venv/bin/activate
+    print_success "Entorno virtual activado"
+else
+    print_error "No se encontró el entorno virtual"
+    exit 1
+fi
+
+# Actualizar dependencias
+print_info "Actualizando dependencias de Python..."
+if pip install -r requirements.txt --quiet; then
+    print_success "Dependencias de Python actualizadas"
+else
+    print_warning "Algunas dependencias no se pudieron actualizar"
+fi
+
+# Verificar si hay migraciones nuevas
+print_section "Verificando Migraciones"
+
+if [ -d "migrations" ]; then
+    MIGRATIONS=$(find migrations -name "*.py" -type f ! -name "__*")
+    if [ ! -z "$MIGRATIONS" ]; then
+        print_info "Migraciones encontradas:"
+        echo "$MIGRATIONS" | while read migration; do
+            echo "  - $(basename $migration)"
+        done
+        echo ""
+        read -p "¿Ejecutar migraciones? (s/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Ss]$ ]]; then
+            echo "$MIGRATIONS" | while read migration; do
+                print_info "Ejecutando: $(basename $migration)"
+                if python "$migration"; then
+                    print_success "Migración completada: $(basename $migration)"
+                else
+                    print_error "Error en migración: $(basename $migration)"
+                fi
+            done
+        else
+            print_warning "Migraciones omitidas"
+        fi
+    else
+        print_info "No hay migraciones pendientes"
+    fi
+fi
+
+# ========================================
+# PASO 4: ACTUALIZAR FRONTEND
+# ========================================
+
+print_header "PASO 4: Actualizar Frontend"
+
+cd "$PROJECT_ROOT/frontend"
+
+# Verificar si hay cambios en package.json
+if git diff HEAD@{1} HEAD -- package.json | grep -q "^+.*\""; then
+    print_info "Detectados cambios en dependencias del frontend"
+    print_info "Instalando dependencias de Node.js..."
+    if npm install; then
+        print_success "Dependencias de Node.js actualizadas"
+    else
+        print_warning "Algunas dependencias no se pudieron actualizar"
+    fi
+else
+    print_info "No hay cambios en dependencias del frontend"
+fi
+
+# Construir frontend
+print_info "Construyendo frontend..."
+if npm run build; then
+    print_success "Frontend construido exitosamente"
+else
+    print_error "Error al construir el frontend"
+    exit 1
+fi
+
+# ========================================
+# PASO 5: REINICIAR SERVICIOS
+# ========================================
+
+print_header "PASO 5: Reiniciar Servicios"
+
+# Reiniciar servicio backend
+print_info "Reiniciando servicio backend..."
+if sudo systemctl restart server-panel-api; then
+    print_success "Servicio backend reiniciado"
+else
+    print_error "Error al reiniciar servicio backend"
+    exit 1
+fi
+
+# Esperar a que el servicio esté activo
+sleep 3
+
+# Verificar estado del servicio
+if systemctl is-active --quiet server-panel-api; then
+    print_success "Servicio backend está activo"
+else
+    print_error "El servicio backend no está activo"
+    print_info "Ver logs: sudo journalctl -u server-panel-api -n 50"
+    exit 1
+fi
+
+# Recargar Nginx (opcional)
+if systemctl is-active --quiet nginx; then
+    print_info "Recargando configuración de Nginx..."
+    if sudo systemctl reload nginx; then
+        print_success "Nginx recargado"
+    fi
+fi
+
+# ========================================
+# PASO 6: VERIFICACIONES POST-ACTUALIZACIÓN
+# ========================================
+
+print_header "PASO 6: Verificaciones"
+
+# Verificar API
+print_info "Verificando API..."
+sleep 2
+
+API_DOMAIN=$(grep "^DOMAIN=" "$PROJECT_ROOT/.env" | cut -d'=' -f2)
+if [ ! -z "$API_DOMAIN" ]; then
+    if curl -s -o /dev/null -w "%{http_code}" "https://$API_DOMAIN/api/health" | grep -q "200"; then
+        print_success "API respondiendo correctamente"
+    else
+        print_warning "API no responde en https://$API_DOMAIN/api/health"
+    fi
+fi
+
+# Verificar logs recientes
+print_section "Últimos Logs del Servicio"
+sudo journalctl -u server-panel-api -n 10 --no-pager
+
+# Verificar servicio cron
+print_section "Estado del Servicio Cron"
+if systemctl is-active --quiet cron 2>/dev/null; then
+    print_success "Servicio cron está activo"
+elif systemctl is-active --quiet crond 2>/dev/null; then
+    print_success "Servicio crond está activo"
+else
+    print_warning "Servicio cron no está activo"
+    print_info "Los backups automáticos requieren cron activo"
+fi
+
+# ========================================
+# RESUMEN FINAL
+# ========================================
+
+print_header "Actualización Completada"
+
+echo ""
+print_success "✅ Código actualizado desde Git"
+print_success "✅ Dependencias actualizadas"
+print_success "✅ Frontend reconstruido"
+print_success "✅ Servicios reiniciados"
+echo ""
+
+print_info "📦 Backup guardado en: $BACKUP_DIR"
+echo ""
+
+print_section "Próximos Pasos"
+echo "1. Verificar que el panel funciona correctamente"
+echo "2. Revisar logs si hay algún problema:"
+echo "   sudo journalctl -u server-panel-api -f"
+echo ""
+echo "3. Si algo falla, puedes restaurar el backup:"
+echo "   cp $BACKUP_DIR/.env $PROJECT_ROOT/.env"
+echo "   psql $DB_NAME < $BACKUP_DIR/database.sql"
+echo "   sudo systemctl restart server-panel-api"
+echo ""
+
+print_section "Nuevas Funcionalidades en esta Versión"
+echo "• Monitoreo de servicio cron en panel de Backups"
+echo "• Visualización de commit actual en instancias"
+echo "• Logs de Git/Deploy en panel de instancias"
+echo "• Webhooks de GitHub para auto-deploy"
+echo "• Correcciones en rutas absolutas para crontab"
+echo ""
+
+print_success "🎉 ¡Actualización completada exitosamente!"
+echo ""

@@ -378,22 +378,69 @@ sudo tail -f /var/log/nginx/access.log
 
 ## 🔄 Actualización
 
-Para actualizar el panel después de cambios en el código:
+### Actualización Automática (Recomendado)
+
+Para actualizar una instalación existente:
 
 ```bash
-cd /home/go/api
+cd /home/go/api-dev
+./update.sh
+```
 
-# Backend
+El script automáticamente:
+1. ✅ Crea backup de seguridad (.env y base de datos)
+2. ✅ Descarga cambios desde Git
+3. ✅ Actualiza dependencias de Python
+4. ✅ Ejecuta migraciones de base de datos (si las hay)
+5. ✅ Actualiza dependencias de Node.js (si es necesario)
+6. ✅ Reconstruye el frontend
+7. ✅ Reinicia servicios
+8. ✅ Verifica que todo funcione
+
+**⚠️ IMPORTANTE**: 
+- El script `update.sh` es solo para instalaciones existentes
+- NO usar en instalaciones nuevas (usar `quickstart.sh`)
+- El script crea un backup automático antes de actualizar
+
+### Actualización Manual
+
+Si prefieres actualizar manualmente:
+
+```bash
+cd /home/go/api-dev
+
+# 1. Pull de cambios
+git pull origin main
+
+# 2. Backend
 cd backend
 source venv/bin/activate
 pip install -r requirements.txt
-sudo systemctl restart server-panel-api
 
-# Frontend
+# 3. Migraciones (si las hay)
+# python migrations/nombre_migracion.py
+
+# 4. Frontend
 cd ../frontend
 npm install
 npm run build
-sudo systemctl reload nginx
+
+# 5. Reiniciar
+sudo systemctl restart server-panel-api
+```
+
+### Rollback en Caso de Problemas
+
+Si algo sale mal después de actualizar:
+
+```bash
+# Ver últimos commits
+cd /home/go/api-dev
+git log --oneline -5
+
+# Volver a versión anterior
+git checkout COMMIT_HASH_ANTERIOR
+sudo systemctl restart server-panel-api
 ```
 
 ## 🐛 Solución de Problemas
