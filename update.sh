@@ -54,6 +54,59 @@ print_info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
 }
 
+fix_odoo_nginx() {
+    local SCRIPTS_DIR="$PROJECT_ROOT/scripts"
+    if [ ! -f "$SCRIPTS_DIR/utils/ssl-manager.sh" ]; then
+        print_error "ssl-manager.sh no encontrado en $SCRIPTS_DIR/utils"
+        return 1
+    fi
+    # shellcheck source=/dev/null
+    source "$SCRIPTS_DIR/utils/ssl-manager.sh"
+
+    read -p "Dominio Odoo a corregir (ej: ejemplo.com): " DOMAIN
+    if [ -z "$DOMAIN" ]; then
+        print_error "Dominio vacío"
+        return 1
+    fi
+
+    local DEFAULT_CONF="/home/go/apps/production/odoo/production/odoo.conf"
+    read -p "Ruta a odoo.conf [$DEFAULT_CONF]: " ODOO_CONF
+    ODOO_CONF=${ODOO_CONF:-$DEFAULT_CONF}
+    if [ ! -f "$ODOO_CONF" ]; then
+        print_error "No existe $ODOO_CONF"
+        return 1
+    fi
+
+    local PORT EVENTED_PORT INSTANCE_NAME CERT_FILE KEY_FILE
+    PORT=$(awk -F'=' '/^[[:space:]]*http_port[[:space:]]*=/{gsub(/[[:space:]]/,"",$2); print $2}' "$ODOO_CONF")
+    EVENTED_PORT=$(awk -F'=' '/^[[:space:]]*gevent_port[[:space:]]*=/{gsub(/[[:space:]]/,"",$2); print $2}' "$ODOO_CONF")
+    if [ -z "$PORT" ]; then
+        read -p "http_port no encontrado. Ingresar puerto HTTP: " PORT
+    fi
+    if [ -z "$EVENTED_PORT" ]; then
+        read -p "gevent_port no encontrado. Ingresar EVENTED_PORT [8072]: " EVENTED_PORT
+        EVENTED_PORT=${EVENTED_PORT:-8072}
+    fi
+    INSTANCE_NAME=$(basename "$(dirname "$ODOO_CONF")")
+
+    CERT_FILE="/etc/ssl/cloudflare/$DOMAIN.crt"
+    KEY_FILE="/etc/ssl/cloudflare/$DOMAIN.key"
+
+    if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+        print_info "Usando Let's Encrypt existente"
+        configure_nginx_letsencrypt_ssl "$DOMAIN" "$INSTANCE_NAME" "$PORT" "$EVENTED_PORT"
+    elif [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
+        print_info "Usando Cloudflare Origin existente"
+        configure_nginx_cloudflare_ssl "$DOMAIN" "$INSTANCE_NAME" "$PORT" "$CERT_FILE" "$KEY_FILE" "$EVENTED_PORT"
+    else
+        print_warning "Sin certificado encontrado. Configurando HTTP"
+        configure_http_only "$DOMAIN" "$INSTANCE_NAME" "$PORT" "$EVENTED_PORT"
+    fi
+
+    sudo nginx -t && sudo systemctl reload nginx
+    print_success "Nginx corregido para $DOMAIN (EVENTED_PORT=$EVENTED_PORT)"
+}
+
 # ========================================
 # VERIFICACIONES PREVIAS
 # ========================================
@@ -289,7 +342,6 @@ fi
 print_section "Últimos Logs del Servicio"
 sudo journalctl -u server-panel-api -n 10 --no-pager
 
-# Verificar servicio cron
 print_section "Estado del Servicio Cron"
 if systemctl is-active --quiet cron 2>/dev/null; then
     print_success "Servicio cron está activo"
@@ -326,6 +378,12 @@ echo "   cp $BACKUP_DIR/.env $PROJECT_ROOT/.env"
 echo "   psql $DB_NAME < $BACKUP_DIR/database.sql"
 echo "   sudo systemctl restart server-panel-api"
 echo ""
+
+read -p "¿Corregir ahora la configuración de Nginx para una instancia de Odoo en este servidor? (s/n): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Ss]$ ]]; then
+    fix_odoo_nginx || print_error "No se pudo corregir Nginx de Odoo"
+fi
 
 print_section "Nuevas Funcionalidades en esta Versión"
 echo "• Monitoreo de servicio cron en panel de Backups"
