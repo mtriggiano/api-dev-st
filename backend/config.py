@@ -32,6 +32,7 @@ class Config:
     
     # CORS - Dinámico basado en dominio configurado
     API_DOMAIN = os.getenv('API_DOMAIN', 'api-dev.hospitalprivadosalta.ar')
+    API_BASE_URL = os.getenv('API_BASE_URL', f'https://{API_DOMAIN}')
     CORS_ORIGINS = [
         'http://localhost:5173',
         'http://localhost:3000',

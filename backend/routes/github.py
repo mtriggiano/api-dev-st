@@ -679,7 +679,7 @@ def configure_webhook(instance_name):
         
         # Construir URL del webhook
         from flask import current_app
-        base_url = current_app.config.get('API_BASE_URL', 'https://api-dev.hospitalprivadosalta.ar')
+        base_url = current_app.config.get('API_BASE_URL')
         webhook_url = f"{base_url}/api/github/webhook/{instance_name}"
         
         log_action(
