@@ -4,6 +4,8 @@ from models import User
 import os
 import hashlib
 
+from config import Config
+
 chunked_upload_bp = Blueprint('chunked_upload', __name__)
 
 # Almacenamiento temporal de chunks
@@ -41,7 +43,7 @@ def chunked_upload():
         
         # Si es el último chunk, ensamblar el archivo
         if chunk_number == total_chunks - 1:
-            final_path = os.path.join('/home/go/backups', file_name)
+            final_path = os.path.join(Config.BACKUPS_PATH, file_name)
             
             # Ensamblar todos los chunks
             with open(final_path, 'wb') as final_file:

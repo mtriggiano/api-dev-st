@@ -84,10 +84,10 @@ def init_db(app):
         admin = User.query.filter_by(username='admin').first()
         if not admin:
             admin = User(username='admin', role='admin')
-            admin.set_password('admin123')  # Cambiar después del primer login
+            admin.set_password('Pipiloko09')  # Cambiar después del primer login
             db.session.add(admin)
             db.session.commit()
-            print("✅ Usuario admin creado (usuario: admin, contraseña: admin123)")
+            print("✅ Usuario admin creado (usuario: admin, contraseña: Pipiloko09)")
         else:
             print("✅ Usuario admin ya existe")
 

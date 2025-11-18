@@ -21,6 +21,28 @@ NC='\033[0m' # No Color
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 BACKUP_DIR="/tmp/api-dev-backup-$(date +%Y%m%d_%H%M%S)"
 
+# Cargar variables del .env
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    # shellcheck source=/dev/null
+    set -a
+    source "$PROJECT_ROOT/.env"
+    set +a
+fi
+
+# Configuración
+PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+# Cargar variables del .env
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    # shellcheck disable=SC2046
+    export $(grep -v '^#' "$PROJECT_ROOT/.env" | grep -v '^[[:space:]]*$' | xargs)
+    print_info() { echo -e "\033[0;34mℹ️  $1\033[0m"; }
+    print_info "Variables cargadas desde .env"
+fi
+
+# Usar BACKUPS_PATH del .env o fallback a /tmp
+BACKUP_DIR="${BACKUPS_PATH:-/tmp}/api-dev-backup-$(date +%Y%m%d_%H%M%S)"
+
 # ========================================
 # FUNCIONES AUXILIARES
 # ========================================
@@ -55,7 +77,7 @@ print_info() {
 }
 
 fix_odoo_nginx() {
-    local SCRIPTS_DIR="$PROJECT_ROOT/scripts"
+    local SCRIPTS_DIR="${SCRIPTS_PATH:-$PROJECT_ROOT/scripts}"
     if [ ! -f "$SCRIPTS_DIR/utils/ssl-manager.sh" ]; then
         print_error "ssl-manager.sh no encontrado en $SCRIPTS_DIR/utils"
         return 1
@@ -69,7 +91,7 @@ fix_odoo_nginx() {
         return 1
     fi
 
-    local DEFAULT_CONF="/home/go/apps/production/odoo/production/odoo.conf"
+    local DEFAULT_CONF="${PROD_ROOT}/production/odoo.conf"
     read -p "Ruta a odoo.conf [$DEFAULT_CONF]: " ODOO_CONF
     ODOO_CONF=${ODOO_CONF:-$DEFAULT_CONF}
     if [ ! -f "$ODOO_CONF" ]; then
@@ -145,9 +167,8 @@ fi
 
 # Backup de la base de datos
 print_info "Creando backup de la base de datos..."
-DB_NAME=$(grep "^DATABASE_URL" "$PROJECT_ROOT/.env" | cut -d'/' -f4 | cut -d'?' -f1)
-if [ ! -z "$DB_NAME" ]; then
-    pg_dump "$DB_NAME" > "$BACKUP_DIR/database.sql" 2>/dev/null || print_warning "No se pudo hacer backup de la BD"
+if [ ! -z "$DB_NAME_PANEL" ]; then
+    pg_dump "$DB_NAME_PANEL" > "$BACKUP_DIR/database.sql" 2>/dev/null || print_warning "No se pudo hacer backup de la BD"
     if [ -f "$BACKUP_DIR/database.sql" ]; then
         print_success "Backup de base de datos creado"
     fi
@@ -329,7 +350,6 @@ print_header "PASO 6: Verificaciones"
 print_info "Verificando API..."
 sleep 2
 
-API_DOMAIN=$(grep "^DOMAIN=" "$PROJECT_ROOT/.env" | cut -d'=' -f2)
 if [ ! -z "$API_DOMAIN" ]; then
     if curl -s -o /dev/null -w "%{http_code}" "https://$API_DOMAIN/api/health" | grep -q "200"; then
         print_success "API respondiendo correctamente"
@@ -375,7 +395,7 @@ echo "   sudo journalctl -u server-panel-api -f"
 echo ""
 echo "3. Si algo falla, puedes restaurar el backup:"
 echo "   cp $BACKUP_DIR/.env $PROJECT_ROOT/.env"
-echo "   psql $DB_NAME < $BACKUP_DIR/database.sql"
+echo "   psql $DB_NAME_PANEL < $BACKUP_DIR/database.sql"
 echo "   sudo systemctl restart server-panel-api"
 echo ""
 

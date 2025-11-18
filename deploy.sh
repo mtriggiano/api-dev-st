@@ -15,7 +15,7 @@ source "$PROJECT_ROOT/scripts/utils/validate-env.sh" \
     DB_USER DB_PASSWORD SECRET_KEY JWT_SECRET_KEY
 
 DOMAIN="${API_DOMAIN}"
-API_DIR="${PROJECT_ROOT:-/home/go/api-dev}"
+API_DIR="${PROJECT_ROOT:-/home/mtg/api-dev}"
 BACKEND_DIR="$API_DIR/backend"
 FRONTEND_DIR="$API_DIR/frontend"
 USER="${SYSTEM_USER:-go}"
@@ -37,9 +37,36 @@ CF_ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$CF
 curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records" \
   -H "Authorization: Bearer $CF_API_TOKEN" \
   -H "Content-Type: application/json" \
-  --data '{"type":"A","name":"'"$DOMAIN"'","content":"'"$PUBLIC_IP"'","ttl":3600,"proxied":true}' >/dev/null
+  --data '{"type":"A","name":"'"$DOMAIN"'","content":"'"$PUBLIC_IP"'","ttl":3600,"proxied":false}' >/dev/null
 
 echo "✅ DNS configurado"
+
+# Esperar propagación DNS antes de solicitar el certificado SSL
+echo "⏳ Verificando propagación DNS..."
+MAX_WAIT=600  # 10 minutos
+SLEEP_INTERVAL=15
+ELAPSED=0
+DNS_READY=0
+
+while [ $ELAPSED -lt $MAX_WAIT ]; do
+    RESOLVED_IP=$(dig +short "$DOMAIN" A @1.1.1.1 | tail -n 1)
+
+    if [ -n "$RESOLVED_IP" ] && [ "$RESOLVED_IP" = "$PUBLIC_IP" ]; then
+        echo "✅ DNS propagado correctamente ($RESOLVED_IP)"
+        DNS_READY=1
+        break
+    fi
+
+    CURRENT_DISPLAY=${RESOLVED_IP:-sin registro}
+    echo "⏳ DNS aún no apunta a $PUBLIC_IP (actual: $CURRENT_DISPLAY). Reintentando en ${SLEEP_INTERVAL}s..."
+    sleep $SLEEP_INTERVAL
+    ELAPSED=$((ELAPSED + SLEEP_INTERVAL))
+done
+
+if [ $DNS_READY -ne 1 ]; then
+    echo "⚠️ Advertencia: el DNS aún no apunta a $PUBLIC_IP después de $MAX_WAIT segundos."
+    echo "   Se omitirá la solicitud automática del certificado SSL."
+fi
 
 # 2. Verificar dependencias del sistema
 echo "📦 Verificando dependencias del sistema..."
@@ -147,9 +174,9 @@ fi
 echo "📁 Creando estructura de directorios..."
 mkdir -p "$API_DIR/logs"
 mkdir -p "$API_DIR/data"
-mkdir -p "${BACKUPS_PATH:-/home/go/backups}"
-mkdir -p "${PROD_ROOT:-/home/go/apps/production/odoo}"
-mkdir -p "${DEV_ROOT:-/home/go/apps/develop/odoo}"
+mkdir -p "${BACKUPS_PATH:-/home/mtg/backups}"
+mkdir -p "${PROD_ROOT:-/home/mtg/apps/production/odoo}"
+mkdir -p "${DEV_ROOT:-/home/mtg/apps/develop/odoo}"
 touch "$API_DIR/data/puertos_ocupados_odoo.txt"
 touch "$API_DIR/data/dev-instances.txt"
 chmod 755 "$API_DIR/logs" "$API_DIR/data"
@@ -300,8 +327,14 @@ sudo systemctl reload nginx
 # 7. Obtener certificado SSL
 echo "🔐 Obteniendo certificado SSL..."
 if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
-  sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN --redirect
-  echo "✅ Certificado SSL obtenido"
+  if [ $DNS_READY -eq 1 ]; then
+    sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN --redirect
+    echo "✅ Certificado SSL obtenido"
+  else
+    echo "⚠️ Certificado SSL omitido porque el DNS aún no propaga a $PUBLIC_IP."
+    echo "   Una vez propagado, ejecuta manualmente:"
+    echo "   sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN --redirect"
+  fi
 else
   echo "✅ Certificado SSL ya existe"
 fi

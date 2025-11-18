@@ -29,6 +29,7 @@ class Config:
     DATA_PATH = os.getenv('DATA_PATH', f'{PROJECT_ROOT}/data')
     PUERTOS_FILE = os.getenv('PUERTOS_FILE', f'{DATA_PATH}/puertos_ocupados_odoo.txt')
     DEV_INSTANCES_FILE = os.getenv('DEV_INSTANCES_FILE', f'{DATA_PATH}/dev-instances.txt')
+    BACKUPS_PATH = os.getenv('BACKUPS_PATH', '/home/go/backups')
     
     # CORS - Dinámico basado en dominio configurado
     API_DOMAIN = os.getenv('API_DOMAIN', 'api-dev.hospitalprivadosalta.ar')

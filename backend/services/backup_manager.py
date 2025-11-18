@@ -5,15 +5,17 @@ from datetime import datetime
 import glob
 import logging
 
+from config import Config
+
 # Configurar logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 class BackupManager:
-    def __init__(self, backup_dir='/home/go/backups', scripts_path='/home/go/api-dev/scripts'):
-        self.backup_dir = backup_dir
-        self.scripts_path = scripts_path
-        self.config_file = os.path.join(backup_dir, 'backup_config.json')
+    def __init__(self, backup_dir=None, scripts_path=None):
+        self.backup_dir = backup_dir or Config.BACKUPS_PATH
+        self.scripts_path = scripts_path or Config.SCRIPTS_PATH
+        self.config_file = os.path.join(self.backup_dir, 'backup_config.json')
         self._ensure_backup_dir()
         self._load_config()
     
@@ -82,7 +84,8 @@ class BackupManager:
         # Agregar nueva línea si está habilitado
         if self.config['auto_backup_enabled']:
             lines.append(f"{cron_comment}")
-            lines.append(f"{self.config['schedule']} {script_path} >> /home/go/backups/cron.log 2>&1")
+            cron_log = os.path.join(self.backup_dir, 'cron.log')
+            lines.append(f"{self.config['schedule']} {script_path} >> {cron_log} 2>&1")
         
         # Escribir nuevo crontab
         new_cron = '\n'.join(lines) + '\n'
