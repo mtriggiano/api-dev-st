@@ -49,10 +49,6 @@ SUBDOMAIN="$INSTANCE.$CF_ZONE_NAME"
 echo "ℹ️  Nota: Esta instancia usará el subdominio: $SUBDOMAIN"
 
 LOG="/tmp/odoo-create-$INSTANCE_NAME.log"
-# Crear archivo de log vacío
-touch "$LOG" 2>/dev/null || LOG="/dev/null"
-# Redirigir salida tanto a pantalla como a log
-exec > >(tee -a "$LOG") 2>&1
 
 echo "🚀 Iniciando creación de instancia Odoo: $INSTANCE_NAME"
 echo "📝 Log: $LOG"
