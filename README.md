@@ -544,12 +544,21 @@ Para problemas o dudas:
 
 ---
 
-## 📚 Documentación Adicional
+## 📚 Documentación
 
+### Documentación de Usuario
 - **[MULTI_PRODUCTION_INSTANCES.md](docs/MULTI_PRODUCTION_INSTANCES.md)** - Guía completa de multi-instancia
-- **[BACKUP_V2_TESTING_GUIDE.md](BACKUP_V2_TESTING_GUIDE.md)** - Guía de testing del sistema de backups
-- **[TEST_UPLOAD_BACKUP_V2.md](TEST_UPLOAD_BACKUP_V2.md)** - Testing de upload de backups
-- **[PRODUCTION_INSTANCES_QUICKSTART.md](PRODUCTION_INSTANCES_QUICKSTART.md)** - Inicio rápido multi-instancia
+- **[SSL_CONFIGURATION.md](docs/SSL_CONFIGURATION.md)** - Configuración SSL
+- **[GITHUB_INTEGRATION.md](docs/GITHUB_INTEGRATION.md)** - Integración con GitHub
+- **[GITHUB_WEBHOOK.md](docs/GITHUB_WEBHOOK.md)** - Webhooks y auto-deploy
+
+### Documentación Técnica y de Desarrollo
+- **[docs/development/](docs/development/)** - Toda la documentación técnica, fixes, features y guías de implementación
+  - Backups V2: Testing, implementación, upload
+  - Multi-instancia: Creación, eliminación, gestión
+  - Fixes: Soluciones a problemas específicos
+  - Features: Nuevas características implementadas
+  - Ver [docs/development/README.md](docs/development/README.md) para índice completo
 
 ---
 
