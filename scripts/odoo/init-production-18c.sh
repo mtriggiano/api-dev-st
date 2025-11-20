@@ -116,10 +116,11 @@ done
 [[ -z "$EVENTED_PORT" ]] && echo "❌ No se encontró un EVENTED_PORT libre. Abortando." && exit 1
 
 # Configurar dominio según tipo de instancia
+# IMPORTANTE: El dominio usa $INSTANCE (sin prefijo prod-) para subdominios limpios
 if [[ "$USE_ROOT_DOMAIN" == true ]]; then
   DOMAIN="$CF_ZONE_NAME"
 else
-  DOMAIN="$INSTANCE_NAME.$CF_ZONE_NAME"
+  DOMAIN="$INSTANCE.$CF_ZONE_NAME"  # Usa INSTANCE, no INSTANCE_NAME
 fi
 BASE_DIR="$ODOO_ROOT/$INSTANCE_NAME"
 ODOO_LOG="$BASE_DIR/odoo.log"

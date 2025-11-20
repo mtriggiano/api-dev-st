@@ -115,10 +115,11 @@ done
 echo "✅ Evented port asignado: $EVENTED_PORT"
 
 # Configurar dominio según tipo de instancia
+# IMPORTANTE: El dominio usa $INSTANCE (sin prefijo prod-) para subdominios limpios
 if [[ "$USE_ROOT_DOMAIN" == true ]]; then
   DOMAIN="$CF_ZONE_NAME"
 else
-  DOMAIN="$INSTANCE_NAME.$CF_ZONE_NAME"
+  DOMAIN="$INSTANCE.$CF_ZONE_NAME"  # Usa INSTANCE, no INSTANCE_NAME
 fi
 
 BASE_DIR="$ODOO_ROOT/$INSTANCE_NAME"
