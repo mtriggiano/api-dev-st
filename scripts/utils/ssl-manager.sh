@@ -454,7 +454,16 @@ prompt_ssl_method() {
     echo "" >&2
     
     while true; do
-        read -p "Selecciona una opción (1-3): " SSL_CHOICE </dev/tty
+        # Leer de stdin en lugar de /dev/tty para compatibilidad con ejecución no-interactiva
+        if [ -t 0 ]; then
+            # Si hay terminal, usar /dev/tty
+            read -p "Selecciona una opción (1-3): " SSL_CHOICE </dev/tty
+        else
+            # Si no hay terminal, leer de stdin
+            echo "Selecciona una opción (1-3): " >&2
+            read SSL_CHOICE
+        fi
+        
         case $SSL_CHOICE in
             1|2|3)
                 echo "$SSL_CHOICE"
@@ -462,6 +471,11 @@ prompt_ssl_method() {
                 ;;
             *)
                 echo "❌ Opción inválida. Por favor selecciona 1, 2 o 3." >&2
+                # Si no hay terminal y la opción es inválida, salir del loop para evitar loop infinito
+                if [ ! -t 0 ]; then
+                    echo "❌ Error: Opción SSL inválida en modo no-interactivo" >&2
+                    return 1
+                fi
                 ;;
         esac
     done

@@ -68,11 +68,22 @@ export const instances = {
   get: (name) => 
     api.get(`/api/instances/${name}`),
   
-  create: (name) => 
-    api.post('/api/instances/create', { name }),
+  // Método actualizado: ahora acepta sourceInstance
+  create: (name, sourceInstance = null, neutralize = true) => 
+    api.post('/api/instances/create', { name, sourceInstance, neutralize }),
+  
+  // Nuevo método: obtener instancias de producción disponibles
+  getProductionInstances: () => 
+    api.get('/api/instances/production-instances'),
+  
+  createProduction: (name, sslMethod = 'letsencrypt') => 
+    api.post('/api/instances/create-production', { name, ssl_method: sslMethod }),
   
   delete: (name) => 
     api.delete(`/api/instances/${name}`),
+  
+  deleteProduction: (name, confirmation) => 
+    api.delete(`/api/instances/production/${name}`, { data: { confirmation } }),
   
   updateDb: (name, neutralize = true) => 
     api.post(`/api/instances/${name}/update-db`, { neutralize }),
@@ -218,3 +229,56 @@ export const github = {
 };
 
 export default api;
+
+// API V2 para backups multi-instancia
+export const backupV2 = {
+  // Gestión de instancias
+  listInstances: () => 
+    api.get('/api/backup/v2/instances'),
+  
+  getInstanceConfig: (instanceName) => 
+    api.get(`/api/backup/v2/instances/${instanceName}/config`),
+  
+  updateInstanceConfig: (instanceName, config) => 
+    api.put(`/api/backup/v2/instances/${instanceName}/config`, config),
+  
+  toggleAutoBackup: (instanceName, enabled) => 
+    api.post(`/api/backup/v2/instances/${instanceName}/toggle`, { enabled }),
+  
+  // Backups
+  listBackups: (instanceName) => 
+    api.get(`/api/backup/v2/instances/${instanceName}/backups`),
+  
+  createBackup: (instanceName) => 
+    api.post(`/api/backup/v2/instances/${instanceName}/backup`),
+  
+  deleteBackup: (instanceName, filename) => 
+    api.delete(`/api/backup/v2/instances/${instanceName}/backups/${filename}`),
+  
+  downloadBackup: (instanceName, filename) => 
+    api.get(`/api/backup/v2/instances/${instanceName}/backups/${filename}/download`, {
+      responseType: 'blob'
+    }),
+  
+  restoreBackup: (instanceName, filename) => 
+    api.post(`/api/backup/v2/instances/${instanceName}/restore`, { filename }),
+  
+  uploadBackup: (instanceName, formData, onProgress) => 
+    api.post(`/api/backup/v2/instances/${instanceName}/upload`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      },
+      onUploadProgress: onProgress
+    }),
+  
+  // Logs
+  getBackupLog: (instanceName) => 
+    api.get(`/api/backup/v2/instances/${instanceName}/backup-log`),
+  
+  getRestoreLog: (instanceName) => 
+    api.get(`/api/backup/v2/instances/${instanceName}/restore-log`),
+  
+  // Estadísticas
+  getGlobalStats: () => 
+    api.get('/api/backup/v2/stats'),
+};

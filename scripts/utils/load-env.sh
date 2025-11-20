@@ -49,7 +49,7 @@ set +a
 # Verificar que se cargaron las variables críticas
 if [ -z "$PROJECT_ROOT" ]; then
     echo "⚠️  Advertencia: PROJECT_ROOT no está definido en .env"
-    export PROJECT_ROOT="/home/go/api-dev"
+    export PROJECT_ROOT="/home/mtg/api-dev"
 fi
 
 # Actualizar rutas derivadas

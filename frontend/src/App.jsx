@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import Instances from './components/Instances';
 import Logs from './components/Logs';
 import Backups from './components/Backups';
+import BackupsV2 from './components/BackupsV2';
 import Layout from './components/Layout';
 
 function PrivateRoute({ children }) {
@@ -52,6 +53,16 @@ function App() {
             <PrivateRoute>
               <Layout>
                 <Backups />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/backups-v2"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <BackupsV2 />
               </Layout>
             </PrivateRoute>
           }

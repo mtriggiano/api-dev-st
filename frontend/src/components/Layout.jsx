@@ -20,6 +20,7 @@ export default function Layout({ children }) {
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Instancias', href: '/instances', icon: Server },
     { name: 'Backups', href: '/backups', icon: Database },
+    { name: 'Backups V2', href: '/backups-v2', icon: Database },
     { name: 'Logs', href: '/logs', icon: FileText },
   ];
 

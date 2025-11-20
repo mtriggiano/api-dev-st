@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { instances, github } from '../lib/api';
-import { Server, Play, Square, Trash2, RefreshCw, Database, FileText, Plus, Eye, AlertCircle, FolderSync, Palette, Github, GitCommit, Clock, Settings, MoreVertical, Search, Filter } from 'lucide-react';
+import { Server, Play, Square, Trash2, RefreshCw, Database, FileText, Plus, Eye, AlertCircle, FolderSync, Palette, Github, GitCommit, Clock } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import Toast from './Toast';
 import GitHubModal from './GitHubModal';
@@ -14,9 +14,6 @@ export default function Instances() {
   const [newInstanceName, setNewInstanceName] = useState('');
   const [newProdInstanceName, setNewProdInstanceName] = useState('');
   const [sslMethod, setSslMethod] = useState('letsencrypt');
-  const [availableProductionInstances, setAvailableProductionInstances] = useState([]);
-  const [selectedSourceInstance, setSelectedSourceInstance] = useState('');
-  const [neutralizeDatabase, setNeutralizeDatabase] = useState(true);
   const [selectedInstance, setSelectedInstance] = useState(null);
   const [logs, setLogs] = useState('');
   const [activeLogTab, setActiveLogTab] = useState('systemd');
@@ -27,33 +24,12 @@ export default function Instances() {
   const [updateLog, setUpdateLog] = useState({ show: false, instanceName: '', action: '', log: '', completed: false });
   const [restartModal, setRestartModal] = useState({ show: false, instanceName: '', status: 'Reiniciando...' });
   const [githubModal, setGithubModal] = useState({ show: false, instanceName: '' });
-  const [deleteProductionModal, setDeleteProductionModal] = useState({ show: false, instanceName: '', confirmation: '', step: 1 });
-  const [filterByProduction, setFilterByProduction] = useState('all'); // 'all' o nombre de instancia de producción
-  const [searchTerm, setSearchTerm] = useState('');
-  
-  // Refs para auto-scroll
-  const creationLogRef = useRef(null);
-  const updateLogRef = useRef(null);
 
   useEffect(() => {
     fetchInstances();
     const interval = setInterval(fetchInstances, 10000); // Actualizar cada 10 segundos
     return () => clearInterval(interval);
   }, []);
-
-  // Auto-scroll para el log de creación
-  useEffect(() => {
-    if (creationLogRef.current) {
-      creationLogRef.current.scrollTop = creationLogRef.current.scrollHeight;
-    }
-  }, [creationLog.log]);
-
-  // Auto-scroll para el log de actualización
-  useEffect(() => {
-    if (updateLogRef.current) {
-      updateLogRef.current.scrollTop = updateLogRef.current.scrollHeight;
-    }
-  }, [updateLog.log]);
 
   const fetchInstances = async () => {
     try {
@@ -135,10 +111,6 @@ export default function Instances() {
             }, 2000);
           }, 2000);
         }
-      } else if (action === 'delete-production') {
-        // Para eliminar producción, abrir modal de doble confirmación
-        handleDeleteProduction(instanceName);
-        return; // No continuar con el flujo normal
       } else {
         // Para delete y otras acciones
         switch (action) {
@@ -161,32 +133,6 @@ export default function Instances() {
     }
   };
 
-  const handleDeleteProduction = async (instanceName) => {
-    setDeleteProductionModal({ show: true, instanceName, confirmation: '', step: 1 });
-  };
-
-  const handleConfirmDeleteProduction = async () => {
-    const { instanceName, confirmation } = deleteProductionModal;
-    const expectedConfirmation = `BORRAR${instanceName}`;
-    
-    if (confirmation !== expectedConfirmation) {
-      setToast({ show: true, message: `Debes escribir exactamente: ${expectedConfirmation}`, type: 'error' });
-      return;
-    }
-
-    setActionLoading({ ...actionLoading, [`delete-prod-${instanceName}`]: true });
-    try {
-      const response = await instances.deleteProduction(instanceName, confirmation);
-      setDeleteProductionModal({ show: false, instanceName: '', confirmation: '', step: 1 });
-      setToast({ show: true, message: response.data.message || 'Instancia de producción eliminada', type: 'success' });
-      fetchInstances();
-    } catch (error) {
-      setToast({ show: true, message: error.response?.data?.error || 'Error al eliminar la instancia', type: 'error' });
-    } finally {
-      setActionLoading({ ...actionLoading, [`delete-prod-${instanceName}`]: false });
-    }
-  };
-
   const handleCreateInstance = async () => {
     if (!newInstanceName.trim()) {
       setToast({ show: true, message: 'Debes ingresar un nombre para la instancia', type: 'warning' });
@@ -195,9 +141,9 @@ export default function Instances() {
 
     setActionLoading({ create: true });
     try {
-      const response = await instances.create(newInstanceName, selectedSourceInstance, neutralizeDatabase);
+      const response = await instances.create(newInstanceName);
       setShowCreateModal(false);
-      setCreationLog({ show: true, instanceName: newInstanceName, log: 'Iniciando creación...\n' });
+      setCreationLog({ show: true, instanceName: newInstanceName, log: 'Iniciando creaci\u00f3n...\n' });
       
       // Polling del log cada 2 segundos
       const logInterval = setInterval(async () => {
@@ -205,11 +151,8 @@ export default function Instances() {
           const logResponse = await instances.getCreationLog(newInstanceName);
           setCreationLog(prev => ({ ...prev, log: logResponse.data.log || 'Esperando...' }));
           
-          // Si el log contiene el mensaje final significa que terminó
-          if (logResponse.data.log && (
-            logResponse.data.log.includes('✅ Instancia de desarrollo creada con éxito') ||
-            logResponse.data.log.includes('Instancia creada con éxito')
-          )) {
+          // Si el log contiene "✅" (checkmark) significa que termin\u00f3
+          if (logResponse.data.log && logResponse.data.log.includes('✅ Instancia')) {
             clearInterval(logInterval);
             setTimeout(() => {
               setCreationLog({ show: false, instanceName: '', log: '' });
@@ -229,21 +172,6 @@ export default function Instances() {
       setActionLoading({ create: false });
     }
   };
-
-  const handleOpenCreateModal = async () => {
-    setShowCreateModal(true);
-    try {
-      const response = await instances.getProductionInstances();
-      setAvailableProductionInstances(response.data.instances || []);
-      if (response.data.instances && response.data.instances.length > 0) {
-        setSelectedSourceInstance(response.data.instances[0].name);
-      }
-    } catch (error) {
-      console.error('Error cargando instancias de producción:', error);
-      setToast({ show: true, message: 'Error cargando instancias de producción', type: 'error' });
-    }
-  };
-
 
   const handleCreateProdInstance = async () => {
     if (!newProdInstanceName.trim()) {
@@ -333,43 +261,8 @@ export default function Instances() {
     );
   }
 
-  // Filtrar instancias
-  let productionInstances = instanceList.filter(i => i.type === 'production');
-  let developmentInstances = instanceList.filter(i => i.type === 'development');
-
-  // Aplicar filtro por instancia de producción
-  if (filterByProduction !== 'all') {
-    // Mostrar solo la instancia de producción seleccionada
-    productionInstances = productionInstances.filter(i => i.name === filterByProduction);
-    
-    // Mostrar solo las instancias de desarrollo que corresponden a esta producción
-    // Las instancias dev tienen formato: dev-{nombre}-{produccion}
-    developmentInstances = developmentInstances.filter(i => {
-      // Extraer el nombre de la instancia de producción del nombre dev
-      // Ejemplo: dev-testp4-prod-panel4 -> prod-panel4
-      const match = i.database?.match(new RegExp(`dev-[^-]+-(.+)`));
-      if (match) {
-        const prodName = match[1];
-        return prodName === filterByProduction;
-      }
-      return false;
-    });
-  }
-
-  // Aplicar búsqueda por texto
-  if (searchTerm.trim()) {
-    const search = searchTerm.toLowerCase();
-    productionInstances = productionInstances.filter(i => 
-      i.name?.toLowerCase().includes(search) ||
-      i.domain?.toLowerCase().includes(search) ||
-      i.database?.toLowerCase().includes(search)
-    );
-    developmentInstances = developmentInstances.filter(i => 
-      i.name?.toLowerCase().includes(search) ||
-      i.domain?.toLowerCase().includes(search) ||
-      i.database?.toLowerCase().includes(search)
-    );
-  }
+  const productionInstances = instanceList.filter(i => i.type === 'production');
+  const developmentInstances = instanceList.filter(i => i.type === 'development');
 
   return (
     <div className="space-y-6">
@@ -388,88 +281,13 @@ export default function Instances() {
             Nueva Producción
           </button>
           <button
-            onClick={handleOpenCreateModal}
+            onClick={() => setShowCreateModal(true)}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
           >
             <Plus className="w-5 h-5" />
             Nueva Desarrollo
           </button>
         </div>
-      </div>
-
-      {/* Barra de filtros y búsqueda */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          {/* Filtro por instancia de producción */}
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              <Filter className="w-4 h-4 inline mr-2" />
-              Filtrar por Instancia de Producción
-            </label>
-            <select
-              value={filterByProduction}
-              onChange={(e) => setFilterByProduction(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            >
-              <option value="all">Todas las instancias</option>
-              {instanceList
-                .filter(i => i.type === 'production')
-                .map(prod => (
-                  <option key={prod.name} value={prod.name}>
-                    {prod.name} {prod.domain ? `(${prod.domain})` : ''}
-                  </option>
-                ))
-              }
-            </select>
-          </div>
-
-          {/* Buscador */}
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              <Search className="w-4 h-4 inline mr-2" />
-              Buscar
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por nombre, dominio o base de datos..."
-                className="w-full px-4 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Botón para limpiar filtros */}
-          {(filterByProduction !== 'all' || searchTerm) && (
-            <div className="flex items-end">
-              <button
-                onClick={() => {
-                  setFilterByProduction('all');
-                  setSearchTerm('');
-                }}
-                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors whitespace-nowrap"
-              >
-                Limpiar filtros
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Contador de resultados */}
-        {(filterByProduction !== 'all' || searchTerm) && (
-          <div className="mt-3 text-sm text-gray-600 dark:text-gray-400">
-            Mostrando: {productionInstances.length} producción, {developmentInstances.length} desarrollo
-          </div>
-        )}
       </div>
 
       {/* Producción */}
@@ -528,32 +346,7 @@ export default function Instances() {
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Crear Nueva Instancia de Desarrollo
-            </h3>
-            
-            {/* Selector de instancia de producción */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Clonar desde:
-              </label>
-              <select
-                value={selectedSourceInstance}
-                onChange={(e) => setSelectedSourceInstance(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              >
-                {productionInstances.map((instance) => (
-                  <option key={instance.name} value={instance.name}>
-                    {instance.name} {instance.domain ? `(${instance.domain})` : ''}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Se clonará la base de datos y archivos de esta instancia
-              </p>
-            </div>
-            
-            {/* Input de nombre */}
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Crear Nueva Instancia de Desarrollo</h3>
             <input
               type="text"
               value={newInstanceName}
@@ -561,35 +354,12 @@ export default function Instances() {
               placeholder="Nombre (ej: juan, testing, feature-xyz)"
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
             />
-            
-            {/* Checkbox de neutralización */}
-            <div className="mb-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={neutralizeDatabase}
-                  onChange={(e) => setNeutralizeDatabase(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-                />
-                <span className="text-sm text-gray-700 dark:text-gray-300">
-                  Neutralizar base de datos
-                </span>
-              </label>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
-                {neutralizeDatabase 
-                  ? '✅ Se desactivarán crons, correos, webhooks y se eliminará la licencia Enterprise'
-                  : '⚠️  La instancia mantendrá todos los datos y configuraciones de producción'
-                }
-              </p>
-            </div>
-            
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3 mb-4">
               <p className="text-sm text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>La creación puede tardar varios minutos. Se clonará desde {selectedSourceInstance || 'producción'}.</span>
+                <span>La creación puede tardar varios minutos. Se clonará desde producción y se neutralizará automáticamente.</span>
               </p>
             </div>
-            
             <div className="flex gap-3">
               <button
                 onClick={handleCreateInstance}
@@ -727,7 +497,7 @@ export default function Instances() {
                 </p>
               </div>
             )}
-            <pre ref={updateLogRef} className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto flex-1 text-sm font-mono whitespace-pre-wrap">
+            <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto flex-1 text-sm font-mono whitespace-pre-wrap">
               {updateLog.log}
             </pre>
           </div>
@@ -752,7 +522,7 @@ export default function Instances() {
                 ⏳ La creación puede tardar varios minutos. El log se actualiza automáticamente.
               </p>
             </div>
-            <pre ref={creationLogRef} className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto flex-1 text-sm font-mono whitespace-pre-wrap">
+            <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto flex-1 text-sm font-mono whitespace-pre-wrap">
               {creationLog.log}
             </pre>
           </div>
@@ -876,94 +646,6 @@ export default function Instances() {
           setToast({ show: true, message: 'GitHub conectado exitosamente', type: 'success' });
         }}
       />
-
-      {/* Modal de eliminación de producción con doble confirmación */}
-      {deleteProductionModal.show && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="bg-red-100 dark:bg-red-900 p-3 rounded-full">
-                <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Eliminar Instancia de Producción
-              </h3>
-            </div>
-
-            {deleteProductionModal.step === 1 ? (
-              <>
-                <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                  <p className="text-sm text-red-800 dark:text-red-200 font-semibold mb-2">
-                    ⚠️ ADVERTENCIA: Esta acción es IRREVERSIBLE
-                  </p>
-                  <p className="text-sm text-red-700 dark:text-red-300">
-                    Estás a punto de eliminar la instancia de producción <strong>{deleteProductionModal.instanceName}</strong>.
-                  </p>
-                  <p className="text-sm text-red-700 dark:text-red-300 mt-2">
-                    Esto eliminará:
-                  </p>
-                  <ul className="text-sm text-red-700 dark:text-red-300 list-disc list-inside mt-1 space-y-1">
-                    <li>La base de datos completa</li>
-                    <li>Todos los archivos y código</li>
-                    <li>El filestore (imágenes, PDFs, etc.)</li>
-                    <li>La configuración de Nginx</li>
-                    <li>El servicio systemd</li>
-                  </ul>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setDeleteProductionModal({ show: false, instanceName: '', confirmation: '', step: 1 })}
-                    className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white px-4 py-2 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={() => setDeleteProductionModal({ ...deleteProductionModal, step: 2 })}
-                    className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
-                  >
-                    Continuar
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">
-                  Para confirmar la eliminación, escribe exactamente:
-                </p>
-                <div className="mb-4 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                  <code className="text-sm font-mono text-gray-900 dark:text-white">
-                    BORRAR{deleteProductionModal.instanceName}
-                  </code>
-                </div>
-                <input
-                  type="text"
-                  value={deleteProductionModal.confirmation}
-                  onChange={(e) => setDeleteProductionModal({ ...deleteProductionModal, confirmation: e.target.value })}
-                  placeholder={`BORRAR${deleteProductionModal.instanceName}`}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white mb-4"
-                  autoFocus
-                />
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setDeleteProductionModal({ show: false, instanceName: '', confirmation: '', step: 1 })}
-                    className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white px-4 py-2 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleConfirmDeleteProduction}
-                    disabled={actionLoading[`delete-prod-${deleteProductionModal.instanceName}`] || deleteProductionModal.confirmation !== `BORRAR${deleteProductionModal.instanceName}`}
-                    className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {actionLoading[`delete-prod-${deleteProductionModal.instanceName}`] ? 'Eliminando...' : 'Eliminar Definitivamente'}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -997,7 +679,6 @@ function InstanceCard({ instance, onAction, onViewLogs, onGitHub, actionLoading,
   const statusBg = instance.status === 'active' ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900';
   const [currentCommit, setCurrentCommit] = useState(null);
   const [loadingCommit, setLoadingCommit] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
 
   // Cargar commit actual cuando el componente se monta
   useEffect(() => {
@@ -1135,54 +816,6 @@ function InstanceCard({ instance, onAction, onViewLogs, onGitHub, actionLoading,
           <Eye className="w-4 h-4" />
           <span className="hidden sm:inline">Logs</span>
         </button>
-        
-        {isProduction && (
-          <div className="relative">
-            <button
-              onClick={() => setShowMenu(!showMenu)}
-              title="Opciones de la instancia"
-              className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-            
-            {showMenu && (
-              <>
-                {/* Overlay para cerrar el menú al hacer clic fuera */}
-                <div 
-                  className="fixed inset-0 z-10" 
-                  onClick={() => setShowMenu(false)}
-                />
-                
-                {/* Menú desplegable */}
-                <div className="absolute right-0 bottom-full mb-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20">
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      window.location.href = '/backups-v2';
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors rounded-t-lg"
-                  >
-                    <Database className="w-4 h-4" />
-                    <span>Configurar Backups</span>
-                  </button>
-                  <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      onAction('delete-production', instance.name);
-                    }}
-                    disabled={actionLoading[`delete-prod-${instance.name}`]}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50 rounded-lg"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Eliminar Instancia</span>
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

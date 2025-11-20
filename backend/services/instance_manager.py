@@ -50,6 +50,23 @@ class InstanceManager:
         
         return instances
     
+    def list_production_instances(self):
+        """Lista solo las instancias de producción válidas para clonar"""
+        self._init_paths()
+        instances = []
+        
+        if os.path.exists(self.prod_root):
+            for name in os.listdir(self.prod_root):
+                path = os.path.join(self.prod_root, name)
+                # Filtrar solo directorios válidos con odoo.conf
+                if os.path.isdir(path) and os.path.exists(os.path.join(path, 'odoo.conf')):
+                    # Excluir directorios especiales
+                    if name not in ['temp', 'backups']:
+                        info = self._get_instance_info(name, path, 'production')
+                        instances.append(info)
+        
+        return instances
+    
     def _get_instance_info(self, name, path, env_type):
         """Obtiene información de una instancia"""
         info = {
@@ -70,8 +87,8 @@ class InstanceManager:
                 with open(info_file, 'r', encoding='utf-8') as f:
                     content = f.read()
                     
-                    # Extraer información con regex
-                    port_match = re.search(r'Puerto:\s*(\d+)', content)
+                    # Extraer información con regex (soporta formato con y sin emojis)
+                    port_match = re.search(r'Puerto(?:\s+HTTP)?:\s*(\d+)', content)
                     if port_match:
                         info['port'] = int(port_match.group(1))
                     
@@ -83,7 +100,8 @@ class InstanceManager:
                     if db_match:
                         info['database'] = db_match.group(1)
                     
-                    service_match = re.search(r'Servicio systemd:\s*([^\s]+)', content)
+                    # Buscar servicio con varios formatos posibles
+                    service_match = re.search(r'(?:Servicio(?:\s+systemd)?|🧩\s+Servicio):\s*([^\s]+)', content)
                     if service_match:
                         info['service'] = service_match.group(1)
             except Exception as e:
@@ -149,8 +167,14 @@ class InstanceManager:
         
         return instance
     
-    def create_dev_instance(self, name):
-        """Crea una nueva instancia de desarrollo"""
+    def create_dev_instance(self, name, source_instance=None, neutralize=True):
+        """Crea una nueva instancia de desarrollo
+        
+        Args:
+            name: Nombre de la instancia de desarrollo
+            source_instance: Instancia de producción a clonar (opcional, usa default del .env si no se especifica)
+            neutralize: Si True, neutraliza la base de datos (elimina licencia, desactiva crons/correos)
+        """
         self._init_paths()
         script_path = os.path.join(self.scripts_path, 'odoo/create-dev-instance.sh')
         
@@ -158,10 +182,21 @@ class InstanceManager:
             return {'success': False, 'error': 'Script de creación no encontrado'}
         
         try:
+            # Preparar argumentos del script
+            script_args = ['/bin/bash', script_path, name]
+            
+            # Si se especificó una instancia de producción, agregarla como segundo argumento
+            if source_instance:
+                script_args.append(source_instance)
+            
+            # Agregar opción de neutralización como tercer argumento
+            neutralize_arg = 'neutralize' if neutralize else 'no-neutralize'
+            script_args.append(neutralize_arg)
+            
             # Ejecutar script en background desacoplado del proceso padre
             with open(f'/tmp/odoo-create-dev-{name}.log', 'w') as log_file:
                 process = subprocess.Popen(
-                    ['/bin/bash', script_path, name],
+                    script_args,
                     stdin=subprocess.PIPE,
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
@@ -171,8 +206,7 @@ class InstanceManager:
                 # Enviar confirmación
                 process.stdin.write('s\n')
                 process.stdin.close()
-            logger.info(f"Process started for instance {name}")
-            logger.info(f"Process started for instance {name}")
+            logger.info(f"Process started for dev instance {name} from source {source_instance or 'default'} (neutralize={neutralize})")
             
             return {
                 'success': True,
@@ -180,6 +214,73 @@ class InstanceManager:
                 'log_file': f'/tmp/odoo-create-dev-{name}.log'
             }
         except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def create_prod_instance(self, name, ssl_method='letsencrypt'):
+        """Crea una nueva instancia de producción con subdominio obligatorio
+        
+        Args:
+            name: Nombre de la instancia (será usado como subdominio)
+            ssl_method: Método SSL a usar (cloudflare, letsencrypt, http)
+        
+        Returns:
+            dict: Resultado de la operación
+        """
+        self._init_paths()
+        
+        # Validar que el nombre no intente usar el dominio raíz
+        domain_root = current_app.config.get('DOMAIN_ROOT', 'softrigx.com')
+        forbidden_names = [domain_root, 'production', 'prod', 'www', 'api', 'mail', 'ftp']
+        
+        if name.lower() in forbidden_names:
+            return {
+                'success': False, 
+                'error': f'Nombre prohibido. "{name}" está reservado para proteger el dominio principal.'
+            }
+        
+        # Validar formato DNS válido
+        import re
+        if not re.match(r'^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$', name.lower()):
+            return {
+                'success': False,
+                'error': 'Nombre inválido. Debe contener solo letras minúsculas, números y guiones.'
+            }
+        
+        script_path = os.path.join(self.scripts_path, 'odoo/create-prod-instance.sh')
+        
+        if not os.path.exists(script_path):
+            return {'success': False, 'error': 'Script de creación de producción no encontrado'}
+        
+        try:
+            instance_name = f'prod-{name.lower()}'
+            log_file_path = f'/tmp/odoo-create-{instance_name}.log'
+            
+            # Mapear método SSL a número (1=letsencrypt, 2=cloudflare, 3=http)
+            ssl_map = {'letsencrypt': '1', 'cloudflare': '2', 'http': '3'}
+            ssl_arg = ssl_map.get(ssl_method, '1')
+            
+            # Ejecutar script en background desacoplado del proceso padre (igual que dev)
+            # Pasar método SSL como segundo argumento en lugar de stdin
+            with open(log_file_path, 'w') as log_file:
+                process = subprocess.Popen(
+                    ['/bin/bash', script_path, name, ssl_arg],
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    text=True
+                )
+            
+            logger.info(f"Production instance creation started: {instance_name}")
+            
+            return {
+                'success': True,
+                'message': f'Creación de instancia de producción {instance_name} iniciada. Dominio: {name}.{domain_root}',
+                'log_file': log_file_path,
+                'instance_name': instance_name,
+                'domain': f'{name}.{domain_root}'
+            }
+        except Exception as e:
+            logger.error(f"Error creating production instance: {e}")
             return {'success': False, 'error': str(e)}
     
     def delete_instance(self, instance_name):
@@ -218,6 +319,51 @@ class InstanceManager:
                     error_log = log_file.read()
                 return {'success': False, 'error': f'Error en eliminación. Ver log: /tmp/odoo-delete-{instance_name}.log', 'log': error_log}
         except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def delete_production_instance(self, instance_name, confirmation):
+        """Elimina una instancia de producción con doble confirmación"""
+        self._init_paths()
+        script_path = os.path.join(self.scripts_path, 'odoo/remove-production.sh')
+        
+        if not os.path.exists(script_path):
+            return {'success': False, 'error': 'Script de eliminación no encontrado'}
+        
+        # Validar confirmación
+        expected_confirmation = f"BORRAR{instance_name}"
+        if confirmation != expected_confirmation:
+            return {'success': False, 'error': f'Confirmación incorrecta. Debes escribir exactamente: {expected_confirmation}'}
+        
+        try:
+            # Ejecutar script con confirmación automática y guardar log
+            log_path = f'/tmp/odoo-delete-prod-{instance_name}.log'
+            with open(log_path, 'w') as log_file:
+                process = subprocess.Popen(
+                    ['/bin/bash', script_path],
+                    stdin=subprocess.PIPE,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    text=True
+                )
+                
+                # Enviar nombre de instancia y confirmación
+                process.stdin.write(f"{instance_name}\n{expected_confirmation}\n")
+                process.stdin.close()
+                
+                # Esperar hasta 5 minutos para la eliminación
+                process.wait(timeout=300)
+            
+            if process.returncode == 0:
+                return {'success': True, 'message': f'Instancia de producción {instance_name} eliminada correctamente', 'log_file': log_path}
+            else:
+                # Leer el log para ver qué falló
+                with open(log_path, 'r') as log_file:
+                    error_log = log_file.read()
+                return {'success': False, 'error': f'Error en eliminación. Ver log: {log_path}', 'log': error_log}
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'error': 'La eliminación tardó demasiado tiempo (timeout de 5 minutos)'}
+        except Exception as e:
+            logger.error(f"Error deleting production instance: {e}")
             return {'success': False, 'error': str(e)}
     
     def update_instance_db(self, instance_name, neutralize=True):

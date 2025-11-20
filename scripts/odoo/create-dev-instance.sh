@@ -18,8 +18,6 @@ source "$SCRIPT_DIR/../utils/validate-env.sh" \
 # Configuración desde .env
 PROD_ROOT="${PROD_ROOT}"
 DEV_ROOT="${DEV_ROOT}"
-PROD_INSTANCE="${PROD_INSTANCE_NAME:-odoo-production}"
-PROD_DB="${PROD_INSTANCE_NAME:-odoo-production}"
 PYTHON="${PYTHON_BIN:-/usr/bin/python3.12}"
 PUERTOS_FILE="${PUERTOS_FILE}"
 DEV_INSTANCES_FILE="${DEV_INSTANCES_FILE}"
@@ -36,11 +34,94 @@ command -v /usr/bin/jq >/dev/null 2>&1 || { echo >&2 "❌ 'jq' no está instalad
 command -v /usr/bin/curl >/dev/null 2>&1 || { echo >&2 "❌ 'curl' no está instalado."; exit 1; }
 command -v pg_dump >/dev/null 2>&1 || { echo >&2 "❌ 'pg_dump' no está instalado."; exit 1; }
 
+# Función para listar instancias de producción disponibles
+list_production_instances() {
+    echo "📦 Instancias de producción disponibles:"
+    local instances=()
+    local count=1
+    
+    if [[ -d "$PROD_ROOT" ]]; then
+        for dir in "$PROD_ROOT"/*; do
+            if [[ -d "$dir" ]]; then
+                local name=$(basename "$dir")
+                # Filtrar solo instancias válidas (excluir temp, leeme.txt, etc)
+                if [[ "$name" != "temp" ]] && [[ -f "$dir/odoo.conf" ]]; then
+                    instances+=("$name")
+                    echo "  $count) $name"
+                    ((count++))
+                fi
+            fi
+        done
+    fi
+    
+    if [[ ${#instances[@]} -eq 0 ]]; then
+        echo "  ❌ No se encontraron instancias de producción"
+        exit 1
+    fi
+    
+    echo "${instances[@]}"
+}
+
+# Obtener instancia de producción (desde argumento o preguntar)
+PROD_INSTANCE="$2"
+
+# Obtener opción de neutralización (tercer argumento opcional: "neutralize" o "no-neutralize")
+NEUTRALIZE_OPTION="${3:-neutralize}"
+
+if [[ -z "$PROD_INSTANCE" ]]; then
+    # Si no se pasó como argumento, listar y preguntar
+    echo ""
+    available_instances=($(list_production_instances))
+    echo ""
+    
+    if [[ ${#available_instances[@]} -eq 1 ]]; then
+        # Si solo hay una, usarla automáticamente
+        PROD_INSTANCE="${available_instances[0]}"
+        echo "✅ Usando única instancia disponible: $PROD_INSTANCE"
+    else
+        # Si hay varias, preguntar
+        echo "Selecciona la instancia de producción a clonar:"
+        read -p "> Número o nombre: " selection
+        
+        # Si es un número, obtener el nombre
+        if [[ "$selection" =~ ^[0-9]+$ ]]; then
+            idx=$((selection - 1))
+            if [[ $idx -ge 0 ]] && [[ $idx -lt ${#available_instances[@]} ]]; then
+                PROD_INSTANCE="${available_instances[$idx]}"
+            else
+                echo "❌ Selección inválida"
+                exit 1
+            fi
+        else
+            # Si es un nombre, validar que existe
+            PROD_INSTANCE="$selection"
+        fi
+    fi
+fi
+
+# Normalizar nombre de instancia de producción
+PROD_INSTANCE=$(echo "$PROD_INSTANCE" | tr '[:upper:]' '[:lower:]')
+
 # Verificar que existe la instancia de producción
 if [[ ! -d "$PROD_ROOT/$PROD_INSTANCE" ]]; then
-  echo "❌ No se encontró la instancia de producción en $PROD_ROOT/$PROD_INSTANCE"
+  echo "❌ No se encontró la instancia de producción: $PROD_INSTANCE"
+  echo "   Ruta buscada: $PROD_ROOT/$PROD_INSTANCE"
   exit 1
 fi
+
+# Obtener nombre de la base de datos de producción
+PROD_DB="$PROD_INSTANCE"
+if [[ -f "$PROD_ROOT/$PROD_INSTANCE/odoo.conf" ]]; then
+    # Intentar leer el nombre de la BD del archivo de configuración
+    db_name_from_conf=$(grep "^db_name" "$PROD_ROOT/$PROD_INSTANCE/odoo.conf" | cut -d'=' -f2 | tr -d ' ')
+    if [[ -n "$db_name_from_conf" ]]; then
+        PROD_DB="$db_name_from_conf"
+    fi
+fi
+
+echo ""
+echo "✅ Instancia de producción seleccionada: $PROD_INSTANCE"
+echo "   Base de datos: $PROD_DB"
 
 # Crear directorio de desarrollo si no existe
 mkdir -p "$DEV_ROOT"
@@ -182,7 +263,7 @@ echo "✅ Base de datos clonada correctamente."
 
 # Copiar filestore desde producción
 echo "📁 Copiando filestore (imágenes y archivos adjuntos)..."
-FILESTORE_BASE="/home/go/.local/share/Odoo/filestore"
+FILESTORE_BASE="/home/mtg/.local/share/Odoo/filestore"
 PROD_FILESTORE="$FILESTORE_BASE/$PROD_DB"
 DEV_FILESTORE="$FILESTORE_BASE/$DB_NAME"
 
@@ -196,14 +277,18 @@ else
 fi
 
 # Neutralizar base de datos (eliminar licencia, desactivar correos/crons)
-echo "🛡️  Neutralizando base de datos de desarrollo..."
-cd "$BASE_DIR"
-source "$VENV_DIR/bin/activate"
-python3 "$SCRIPTS_PATH/odoo/neutralize-database.py" "$DB_NAME"
-if [ $? -eq 0 ]; then
-  echo "✅ Base de datos neutralizada correctamente"
+if [[ "$NEUTRALIZE_OPTION" == "neutralize" ]]; then
+  echo "🛡️  Neutralizando base de datos de desarrollo..."
+  # Usar script SQL directo (no requiere importar Odoo)
+  "$SCRIPTS_PATH/odoo/neutralize-database-sql.sh" "$DB_NAME"
+  if [ $? -eq 0 ]; then
+    echo "✅ Base de datos neutralizada correctamente"
+  else
+    echo "❌ Error al neutralizar base de datos"
+    exit 1
+  fi
 else
-  echo "⚠️  Advertencia: Error al neutralizar base de datos"
+  echo "⚠️  Neutralización omitida (base de datos sin modificar)"
 fi
 
 # Generar archivo de configuración Odoo (modo desarrollo)
@@ -289,7 +374,9 @@ echo "🔍 Verificando si ya existe certificado SSL para $DOMAIN..."
 if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
     echo "🚫 Certificado no encontrado. Creando configuración HTTP temporal..."
     
-    echo "server {
+    # Crear archivo temporal
+    cat > /tmp/nginx-$INSTANCE_NAME.conf << EOF
+server {
     listen 80;
     server_name $DOMAIN;
 
@@ -324,15 +411,18 @@ if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 86400;
     }
-}" | sudo tee /etc/nginx/sites-available/$INSTANCE_NAME > /dev/null
+}
+EOF
     
-    sudo ln -s /etc/nginx/sites-available/$INSTANCE_NAME /etc/nginx/sites-enabled/$INSTANCE_NAME
+    # Mover archivo a nginx
+    sudo mv /tmp/nginx-$INSTANCE_NAME.conf /etc/nginx/sites-available/$INSTANCE_NAME
+    sudo ln -sf /etc/nginx/sites-available/$INSTANCE_NAME /etc/nginx/sites-enabled/$INSTANCE_NAME
     
     echo "🔄 Recargando Nginx con configuración HTTP..."
     sudo nginx -t && sudo systemctl reload nginx || sudo systemctl start nginx
     
     echo "📜 Obteniendo certificado SSL con Certbot..."
-    sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN --redirect
+    sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@softrigx.com --redirect
     
     echo "✅ Certificado SSL obtenido y configurado automáticamente por Certbot"
 else
@@ -410,8 +500,8 @@ echo "📝 Creando scripts auxiliares..."
 
 # Script para actualizar BD
 cat > "$BASE_DIR/update-db.sh" <<'UPDATEDB'
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 #!/bin/bash
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # Script para actualizar la BD de desarrollo desde producción
 
 PROD_DB="__PROD_INSTANCE_NAME__"
@@ -422,12 +512,20 @@ echo "🔄 Actualizando base de datos de desarrollo desde producción..."
 echo "   Producción: $PROD_DB"
 echo "   Desarrollo: $DEV_DB"
 
-# Leer confirmación
-read CONFIRM
-
-if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
-  echo "❌ Cancelado."
-  exit 1
+# Leer confirmación (solo si stdin está disponible)
+if [ -t 0 ]; then
+  read -p "Confirmar actualización (s/n): " CONFIRM
+  if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+    echo "❌ Cancelado."
+    exit 1
+  fi
+else
+  # Ejecutado desde backend, leer de stdin
+  read CONFIRM
+  if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+    echo "❌ Cancelado."
+    exit 1
+  fi
 fi
 
 echo "⏹️  Deteniendo servicio Odoo..."
@@ -441,12 +539,19 @@ echo "📦 Creando dump de producción..."
 sudo -u postgres pg_dump "$PROD_DB" > "/tmp/${DEV_DB}_dump.sql"
 
 echo "🔄 Restaurando en desarrollo..."
-sudo -u postgres createdb "$DEV_DB" -O "go" --encoding='UTF8'
+sudo -u postgres createdb "$DEV_DB" -O "mtg" --encoding='UTF8'
 sudo -u postgres psql -d "$DEV_DB" < "/tmp/${DEV_DB}_dump.sql"
 rm -f "/tmp/${DEV_DB}_dump.sql"
 
+# Asegurar permisos correctos
+echo "🔐 Configurando permisos..."
+sudo -u postgres psql -d "$DEV_DB" -c "GRANT ALL ON SCHEMA public TO mtg;" > /dev/null
+sudo -u postgres psql -d "$DEV_DB" -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO mtg;" > /dev/null
+sudo -u postgres psql -d "$DEV_DB" -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO mtg;" > /dev/null
+sudo -u postgres psql -d "$DEV_DB" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO mtg;" > /dev/null
+
 echo "📁 Sincronizando filestore..."
-FILESTORE_BASE="/home/go/.local/share/Odoo/filestore"
+FILESTORE_BASE="/home/mtg/.local/share/Odoo/filestore"
 PROD_FILESTORE="$FILESTORE_BASE/$PROD_DB"
 DEV_FILESTORE="$FILESTORE_BASE/$DEV_DB"
 if [[ -d "$PROD_FILESTORE" ]]; then
@@ -462,14 +567,11 @@ read NEUTRALIZE
 
 if [[ "$NEUTRALIZE" == "s" ]] || [[ "$NEUTRALIZE" == "S" ]]; then
   echo "🔒 Neutralizando base de datos..."
-  NEUTRALIZE_SCRIPT="/home/go/api-dev/scripts/odoo/neutralize-database.py"
+  NEUTRALIZE_SCRIPT="/home/mtg/api-dev/scripts/odoo/neutralize-database-sql.sh"
   if [[ -f "$NEUTRALIZE_SCRIPT" ]]; then
-    cd "__BASE_DIR__"
-    source venv/bin/activate
-    python3 "$NEUTRALIZE_SCRIPT" "$DEV_DB"
-    echo "✅ Base de datos neutralizada"
+    "$NEUTRALIZE_SCRIPT" "$DEV_DB"
   else
-    echo "⚠️  Script de neutralización no encontrado"
+    echo "⚠️  Script de neutralización no encontrado en: $NEUTRALIZE_SCRIPT"
   fi
 fi
 
@@ -491,9 +593,9 @@ sed -i "s|__BASE_DIR__|$BASE_DIR|g" "$BASE_DIR/update-db.sh"
 chmod +x "$BASE_DIR/update-db.sh"
 
 # Script para actualizar archivos
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 cat > "$BASE_DIR/update-files.sh" <<'UPDATEFILES'
 #!/bin/bash
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # Script para actualizar archivos de desarrollo desde producción
 
 PROD_DIR="__PROD_DIR__"
@@ -504,12 +606,20 @@ echo "🔄 Actualizando archivos desde producción..."
 echo "   Producción: $PROD_DIR"
 echo "   Desarrollo: $DEV_DIR"
 
-# Leer confirmación
-read CONFIRM
-
-if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
-  echo "❌ Cancelado."
-  exit 1
+# Leer confirmación (solo si stdin está disponible)
+if [ -t 0 ]; then
+  read -p "Confirmar actualización (s/n): " CONFIRM
+  if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+    echo "❌ Cancelado."
+    exit 1
+  fi
+else
+  # Ejecutado desde backend, leer de stdin
+  read CONFIRM
+  if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+    echo "❌ Cancelado."
+    exit 1
+  fi
 fi
 
 echo "⏹️  Deteniendo servicio Odoo..."
@@ -553,8 +663,8 @@ chmod +x "$BASE_DIR/update-files.sh"
 
 # Script para sincronizar filestore
 cat > "$BASE_DIR/sync-filestore.sh" <<'SYNCFILESTORE'
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 #!/bin/bash
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # Script para sincronizar filestore desde producción
 
 PROD_DB="__PROD_INSTANCE_NAME__"
@@ -565,19 +675,27 @@ echo "📁 Sincronizando filestore desde producción..."
 echo "   Producción: $PROD_DB"
 echo "   Desarrollo: $DEV_DB"
 
-# Leer confirmación
-read CONFIRM
-
-if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
-  echo "❌ Cancelado."
-  exit 1
+# Leer confirmación (solo si stdin está disponible)
+if [ -t 0 ]; then
+  read -p "Confirmar sincronización (s/n): " CONFIRM
+  if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+    echo "❌ Cancelado."
+    exit 1
+  fi
+else
+  # Ejecutado desde backend, leer de stdin
+  read CONFIRM
+  if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+    echo "❌ Cancelado."
+    exit 1
+  fi
 fi
 
 echo "⏹️  Deteniendo servicio Odoo..."
 sudo systemctl stop "odoo19e-$INSTANCE_NAME"
 
 echo "📁 Sincronizando filestore..."
-FILESTORE_BASE="/home/go/.local/share/Odoo/filestore"
+FILESTORE_BASE="/home/mtg/.local/share/Odoo/filestore"
 PROD_FILESTORE="$FILESTORE_BASE/$PROD_DB"
 DEV_FILESTORE="$FILESTORE_BASE/$DEV_DB"
 
@@ -603,8 +721,8 @@ chmod +x "$BASE_DIR/sync-filestore.sh"
 
 # Script para regenerar assets
 cat > "$BASE_DIR/regenerate-assets.sh" <<'REGENASSETS'
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 #!/bin/bash
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # Script para regenerar assets de Odoo
 
 INSTANCE_NAME="__INSTANCE_NAME__"
@@ -613,26 +731,88 @@ BASE_DIR="__BASE_DIR__"
 echo "🎨 Regenerando assets de Odoo..."
 echo "   Instancia: $INSTANCE_NAME"
 
-# Leer confirmación
-read CONFIRM
-
-if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
-  echo "❌ Cancelado."
-  exit 1
+# Leer confirmación (solo si stdin está disponible)
+if [ -t 0 ]; then
+  read -p "Confirmar regeneración (s/n): " CONFIRM
+  if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+    echo "❌ Cancelado."
+    exit 1
+  fi
+else
+  # Ejecutado desde backend, leer de stdin
+  read CONFIRM
+  if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+    echo "❌ Cancelado."
+    exit 1
+  fi
 fi
 
 echo "⏹️  Deteniendo servicio Odoo..."
 sudo systemctl stop "odoo19e-$INSTANCE_NAME"
 
+# Esperar a que el puerto se libere
+echo "   Esperando a que el puerto se libere..."
+sleep 5
+
 echo "🎨 Regenerando assets..."
+echo "   Esto puede tardar 1-2 minutos, por favor espera..."
 cd "$BASE_DIR"
 source venv/bin/activate
-./venv/bin/python3 ./odoo-server/odoo-bin -c ./odoo.conf --update=all --stop-after-init
+
+# Ejecutar regeneración con output visible
+echo "   Iniciando proceso de actualización..."
+
+# Guardar output en archivo temporal y mostrar progreso
+TEMP_LOG="/tmp/odoo-regenerate-$INSTANCE_NAME.log"
+./venv/bin/python3 ./odoo-server/odoo-bin -c ./odoo.conf --update=all --stop-after-init > "$TEMP_LOG" 2>&1 &
+ODOO_PID=$!
+
+# Mostrar progreso mientras se ejecuta
+echo "   Procesando (esto puede tardar 1-2 minutos)..."
+while kill -0 $ODOO_PID 2>/dev/null; do
+  sleep 2
+  echo -n "."
+done
+echo ""
+
+# Esperar a que termine completamente
+wait $ODOO_PID
+EXIT_CODE=$?
+
+# Mostrar líneas importantes del log
+echo "   Mostrando resumen del proceso:"
+grep -E "(Loading|Modules loaded|Assets|Generating|completed|ERROR|WARNING)" "$TEMP_LOG" 2>/dev/null | tail -10 | sed 's/^/   /'
+
+if [ $EXIT_CODE -eq 0 ]; then
+  echo "✅ Regeneración completada exitosamente"
+else
+  echo "⚠️  Proceso terminó con código: $EXIT_CODE"
+  echo "   Ver log completo en: $TEMP_LOG"
+fi
 
 echo "▶️  Iniciando servicio Odoo..."
 sudo systemctl start "odoo19e-$INSTANCE_NAME"
 
-echo "✅ Assets regenerados correctamente."
+# Esperar a que el servicio inicie
+sleep 2
+
+# Verificar que el servicio está corriendo
+if sudo systemctl is-active --quiet "odoo19e-$INSTANCE_NAME"; then
+  echo "✅ Servicio iniciado correctamente"
+else
+  echo "⚠️  El servicio no se inició correctamente"
+fi
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ Assets regenerados correctamente"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "💡 Verifica que los cambios se aplicaron:"
+echo "   1. Recarga la página en el navegador (Ctrl+Shift+R)"
+echo "   2. Verifica que los estilos se vean correctamente"
+echo "   3. Revisa los logs si hay algún problema:"
+echo "      sudo journalctl -u odoo19e-$INSTANCE_NAME -n 50"
 REGENASSETS
 
 sed -i "s/__INSTANCE_NAME__/$INSTANCE_NAME/g" "$BASE_DIR/regenerate-assets.sh"

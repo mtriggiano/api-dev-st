@@ -27,6 +27,7 @@ def create_app():
     from routes.instances import instances_bp
     from routes.logs import logs_bp
     from routes.backup import backup_bp
+    from routes.backup_v2 import backup_v2_bp
     from routes.github import github_bp
     from routes.test_upload import test_upload_bp
     from routes.chunked_upload import chunked_upload_bp
@@ -36,6 +37,7 @@ def create_app():
     app.register_blueprint(instances_bp, url_prefix='/api/instances')
     app.register_blueprint(logs_bp, url_prefix='/api/logs')
     app.register_blueprint(backup_bp, url_prefix='/api/backup')
+    app.register_blueprint(backup_v2_bp, url_prefix='/api/backup/v2')
     app.register_blueprint(github_bp, url_prefix='/api/github')
     app.register_blueprint(test_upload_bp, url_prefix='/api')
     app.register_blueprint(chunked_upload_bp, url_prefix='/api')

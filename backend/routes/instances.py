@@ -44,6 +44,16 @@ def get_instance(instance_name):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@instances_bp.route('/production-instances', methods=['GET'])
+@jwt_required()
+def get_production_instances():
+    """Lista las instancias de producción disponibles para clonar"""
+    try:
+        instances = manager.list_production_instances()
+        return jsonify({'instances': instances}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @instances_bp.route('/create', methods=['POST'])
 @jwt_required()
 def create_instance():
@@ -59,15 +69,23 @@ def create_instance():
     if not data or not data.get('name'):
         return jsonify({'error': 'Nombre de instancia requerido'}), 400
     
+    # Obtener instancia de producción a clonar (opcional)
+    source_instance = data.get('sourceInstance')
+    
+    # Obtener opción de neutralización (por defecto True)
+    neutralize = data.get('neutralize', True)
+    
     try:
-        result = manager.create_dev_instance(data['name'])
+        result = manager.create_dev_instance(data['name'], source_instance, neutralize)
         
         # Log
+        source_msg = f" desde {source_instance}" if source_instance else ""
+        neutralize_msg = " (neutralizada)" if neutralize else " (sin neutralizar)"
         log_action(
             user_id,
             'create_instance',
             f"dev-{data['name']}",
-            f"Creación iniciada: {result.get('message')}",
+            f"Creación iniciada{source_msg}{neutralize_msg}: {result.get('message')}",
             'success' if result['success'] else 'error'
         )
         
@@ -77,6 +95,57 @@ def create_instance():
             return jsonify(result), 500
     except Exception as e:
         log_action(user_id, 'create_instance', f"dev-{data['name']}", str(e), 'error')
+        return jsonify({'error': str(e)}), 500
+
+@instances_bp.route('/create-production', methods=['POST'])
+@jwt_required()
+def create_production_instance():
+    """Crea una nueva instancia de producción con subdominio obligatorio
+    
+    Body params:
+        - name: Nombre de la instancia (será usado como subdominio)
+        - ssl_method: Método SSL (cloudflare, letsencrypt, http) - opcional, default: cloudflare
+    
+    IMPORTANTE: El nombre será usado como subdominio. 
+    Ejemplo: name="cliente1" creará cliente1.softrigx.com
+    NUNCA se usará el dominio raíz directamente.
+    """
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    # Solo administradores pueden crear instancias de producción
+    if user.role != 'admin':
+        return jsonify({'error': 'Solo administradores pueden crear instancias de producción'}), 403
+    
+    data = request.get_json()
+    if not data or not data.get('name'):
+        return jsonify({'error': 'Nombre de instancia requerido'}), 400
+    
+    name = data['name'].strip().lower()
+    ssl_method = data.get('ssl_method', 'letsencrypt')
+    
+    # Validación adicional en el endpoint
+    if not name:
+        return jsonify({'error': 'El nombre no puede estar vacío'}), 400
+    
+    try:
+        result = manager.create_prod_instance(name, ssl_method)
+        
+        # Log
+        log_action(
+            user_id,
+            'create_production_instance',
+            result.get('instance_name', f'prod-{name}'),
+            f"Creación iniciada: {result.get('message')} - SSL: {ssl_method}",
+            'success' if result['success'] else 'error'
+        )
+        
+        if result['success']:
+            return jsonify(result), 202  # Accepted
+        else:
+            return jsonify(result), 400 if 'prohibido' in result.get('error', '').lower() or 'inválido' in result.get('error', '').lower() else 500
+    except Exception as e:
+        log_action(user_id, 'create_production_instance', f'prod-{name}', str(e), 'error')
         return jsonify({'error': str(e)}), 500
 
 @instances_bp.route('/<instance_name>', methods=['DELETE'])
@@ -108,6 +177,44 @@ def delete_instance(instance_name):
             return jsonify(result), 500
     except Exception as e:
         log_action(user_id, 'delete_instance', instance_name, str(e), 'error')
+        return jsonify({'error': str(e)}), 500
+
+@instances_bp.route('/production/<instance_name>', methods=['DELETE'])
+@jwt_required()
+def delete_production_instance(instance_name):
+    """Elimina una instancia de producción con doble confirmación"""
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    # Solo administradores pueden eliminar instancias de producción
+    if user.role != 'admin':
+        return jsonify({'error': 'Solo administradores pueden eliminar instancias de producción'}), 403
+    
+    try:
+        # Obtener confirmación del request
+        data = request.get_json() or {}
+        confirmation = data.get('confirmation', '')
+        
+        if not confirmation:
+            return jsonify({'error': 'Se requiere confirmación para eliminar'}), 400
+        
+        result = manager.delete_production_instance(instance_name, confirmation)
+        
+        # Log
+        log_action(
+            user_id,
+            'delete_production_instance',
+            instance_name,
+            result.get('message') or result.get('error'),
+            'success' if result['success'] else 'error'
+        )
+        
+        if result['success']:
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+    except Exception as e:
+        log_action(user_id, 'delete_production_instance', instance_name, str(e), 'error')
         return jsonify({'error': str(e)}), 500
 
 @instances_bp.route('/<instance_name>/update-db', methods=['POST'])
@@ -230,7 +337,12 @@ def get_creation_log(instance_name):
     """Obtiene el log de creación de una instancia"""
     import os
     
-    log_file = f'/tmp/odoo-create-dev-{instance_name}.log'
+    # Detectar si es instancia de producción o desarrollo
+    # Las instancias de producción vienen como "prod-nombre"
+    if instance_name.startswith('prod-'):
+        log_file = f'/tmp/odoo-create-{instance_name}.log'
+    else:
+        log_file = f'/tmp/odoo-create-dev-{instance_name}.log'
     
     if not os.path.exists(log_file):
         return jsonify({'log': 'Log no disponible aún...', 'exists': False}), 200

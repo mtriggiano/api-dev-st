@@ -31,6 +31,10 @@ class Config:
     DEV_INSTANCES_FILE = os.getenv('DEV_INSTANCES_FILE', f'{DATA_PATH}/dev-instances.txt')
     BACKUPS_PATH = os.getenv('BACKUPS_PATH', '/home/go/backups')
     
+    # Domain configuration - IMPORTANTE: El dominio raíz está protegido
+    DOMAIN_ROOT = os.getenv('DOMAIN_ROOT', 'softrigx.com')
+    PUBLIC_IP = os.getenv('PUBLIC_IP', '')
+    
     # CORS - Dinámico basado en dominio configurado
     API_DOMAIN = os.getenv('API_DOMAIN', 'api-dev.hospitalprivadosalta.ar')
     API_BASE_URL = os.getenv('API_BASE_URL', f'https://{API_DOMAIN}')
