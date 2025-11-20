@@ -13,6 +13,8 @@ export default function Instances() {
   const [showCreateProdModal, setShowCreateProdModal] = useState(false);
   const [newInstanceName, setNewInstanceName] = useState('');
   const [newProdInstanceName, setNewProdInstanceName] = useState('');
+  const [odooVersion, setOdooVersion] = useState('19');
+  const [odooEdition, setOdooEdition] = useState('enterprise');
   const [sslMethod, setSslMethod] = useState('letsencrypt');
   const [availableProductionInstances, setAvailableProductionInstances] = useState([]);
   const [selectedSourceInstance, setSelectedSourceInstance] = useState('');
@@ -253,7 +255,7 @@ export default function Instances() {
 
     setActionLoading({ createProd: true });
     try {
-      const response = await instances.createProduction(newProdInstanceName, sslMethod);
+      const response = await instances.createProduction(newProdInstanceName, odooVersion, odooEdition, sslMethod);
       setShowCreateProdModal(false);
       
       const instanceName = response.data.instance_name || `prod-${newProdInstanceName}`;
@@ -280,6 +282,8 @@ export default function Instances() {
       }, 3000);
       
       setNewProdInstanceName('');
+      setOdooVersion('19');
+      setOdooEdition('enterprise');
       setSslMethod('letsencrypt');
     } catch (error) {
       setToast({ show: true, message: error.response?.data?.error || 'Error al crear la instancia de producción', type: 'error' });
@@ -631,6 +635,36 @@ export default function Instances() {
               </div>
             )}
 
+            {/* Selector de versión de Odoo */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Versión de Odoo
+              </label>
+              <select
+                value={odooVersion}
+                onChange={(e) => setOdooVersion(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                <option value="19">Odoo 19</option>
+                <option value="18">Odoo 18</option>
+              </select>
+            </div>
+
+            {/* Selector de edición */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Edición
+              </label>
+              <select
+                value={odooEdition}
+                onChange={(e) => setOdooEdition(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                <option value="enterprise">Enterprise</option>
+                <option value="community">Community</option>
+              </select>
+            </div>
+
             {/* Selector de método SSL */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -669,6 +703,8 @@ export default function Instances() {
                 onClick={() => {
                   setShowCreateProdModal(false);
                   setNewProdInstanceName('');
+                  setOdooVersion('19');
+                  setOdooEdition('enterprise');
                   setSslMethod('letsencrypt');
                 }}
                 className="flex-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg transition-colors"

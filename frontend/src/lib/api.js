@@ -76,8 +76,8 @@ export const instances = {
   getProductionInstances: () => 
     api.get('/api/instances/production-instances'),
   
-  createProduction: (name, sslMethod = 'letsencrypt') => 
-    api.post('/api/instances/create-production', { name, ssl_method: sslMethod }),
+  createProduction: (name, version = '19', edition = 'enterprise', sslMethod = 'letsencrypt') =>
+    api.post('/api/instances/create-production', { name, version, edition, ssl_method: sslMethod }),
   
   delete: (name) => 
     api.delete(`/api/instances/${name}`),
