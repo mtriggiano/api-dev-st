@@ -170,7 +170,7 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
       // 2. Crear configuración
       // Detectar si es producción o desarrollo
       const isProduction = !instanceName.startsWith('dev-');
-      const basePath = isProduction ? '/home/go/apps/production/odoo' : '/home/go/apps/develop/odoo';
+      const basePath = isProduction ? '/home/mtg/apps/production/odoo' : '/home/mtg/apps/develop/odoo';
       const branch = isProduction ? 'main' : instanceName;
       
       const configData = {
