@@ -1,9 +1,12 @@
 #!/bin/bash
 
+# 🔧 Forzar salida en tiempo real al log y al frontend
+LOG="/tmp/odoo-create-$INSTANCE_NAME.log"
+exec > >(stdbuf -oL -eL tee -a "$LOG") 2>&1
+
 # 🚀 Script de creación de instancia Odoo 19 Community - Versión refactorizada
 # Usa variables de entorno desde archivo .env
 
-set -e
 
 # Cargar variables de entorno
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -201,16 +204,16 @@ if [[ -d "$GLOBAL_CUSTOM" ]]; then
 fi
 
 echo "⬇️ Clonando Odoo..."
-git clone --depth 1 --branch $ODOO_VERSION $ODOO_REPO odoo-server
+stdbuf -oL -eL git clone --depth 1 --branch $ODOO_VERSION $ODOO_REPO odoo-server
 
 echo "🐍 Entorno virtual..."
 $PYTHON -m venv venv
 source venv/bin/activate
-pip install --upgrade pip wheel
-pip install -r odoo-server/requirements.txt
-pip install gevent greenlet
+stdbuf -oL -eL pip install --upgrade pip wheel
+stdbuf -oL -eL pip install -r odoo-server/requirements.txt
+stdbuf -oL -eL pip install gevent greenlet
 echo "📦 Instalando dependencias adicionales comunes..."
-pip install phonenumbers
+stdbuf -oL -eL pip install phonenumbers
 
 echo "🗑️ Limpiando base de datos existente si existe..."
 sudo -u postgres dropdb "$INSTANCE_NAME" 2>/dev/null || true
@@ -276,7 +279,7 @@ sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity
 
 echo "📦 Instalando módulos iniciales y configurando entorno Odoo..."
 echo "   Esto puede tomar varios minutos..."
-sudo -u $USER "$VENV_PYTHON" "$BASE_DIR/odoo-server/odoo-bin" -c "$ODOO_CONF" --load-language=es_ES -i base,web,base_setup,contacts,l10n_latam_base,l10n_ar,l10n_ar_reports --without-demo=all --stop-after-init
+stdbuf -oL -eL sudo -u $USER "$VENV_PYTHON" "$BASE_DIR/odoo-server/odoo-bin" -c "$ODOO_CONF" --load-language=es_ES -i base,web,base_setup,contacts,l10n_latam_base,l10n_ar,l10n_ar_reports --without-demo=all --stop-after-init
 
 if [ $? -ne 0 ]; then
   echo "❌ Error al instalar módulos iniciales. Revisa el log en $ODOO_LOG"
@@ -294,14 +297,14 @@ if lang:
 EOFSHELL
 
 echo "🎨 Actualizando módulos..."
-sudo -u $USER "$VENV_PYTHON" "$BASE_DIR/odoo-server/odoo-bin" -c "$ODOO_CONF" --update=all --stop-after-init
+stdbuf -oL -eL sudo -u $USER "$VENV_PYTHON" "$BASE_DIR/odoo-server/odoo-bin" -c "$ODOO_CONF" --update=all --stop-after-init
 
 if [ $? -ne 0 ]; then
   echo "⚠️  Advertencia: Error al actualizar módulos. Continuando..."
 fi
 
 echo "🚀 Iniciando servicio Odoo..."
-sudo systemctl start "odoo19c-$INSTANCE_NAME"
+stdbuf -oL -eL sudo systemctl start "odoo19c-$INSTANCE_NAME"
 sleep 3
 
 if sudo systemctl is-active --quiet "odoo19c-$INSTANCE_NAME"; then
