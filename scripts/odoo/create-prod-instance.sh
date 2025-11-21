@@ -91,4 +91,4 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # Llamar al script específico
-exec "$TARGET_SCRIPT" "$RAW_NAME" "$SSL_METHOD"
+"$TARGET_SCRIPT" "$RAW_NAME" "$SSL_METHOD"
