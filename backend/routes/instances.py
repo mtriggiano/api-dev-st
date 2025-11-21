@@ -360,25 +360,65 @@ def restart_instance(instance_name):
 @instances_bp.route('/creation-log/<instance_name>', methods=['GET'])
 @jwt_required()
 def get_creation_log(instance_name):
-    """Obtiene el log de creación de una instancia"""
+    """Obtiene log incremental + estado + pid de creación"""
     import os
-    
-    # Detectar si es instancia de producción o desarrollo
-    # Las instancias de producción vienen como "prod-nombre"
-    if instance_name.startswith('prod-'):
-        log_file = f'/tmp/odoo-create-{instance_name}.log'
-    else:
-        log_file = f'/tmp/odoo-create-dev-{instance_name}.log'
-    
+
+    # Paths
+    log_file = f'/tmp/odoo-create-{instance_name}.log'
+    pid_file = f'/tmp/{instance_name}.pid'
+    status_file = f'/tmp/{instance_name}.status'
+
+    # Si el log aún no existe
     if not os.path.exists(log_file):
-        return jsonify({'log': 'Log no disponible aún...', 'exists': False}), 200
-    
+        return jsonify({
+            'exists': False,
+            'log': 'Log no disponible aún...',
+            'pid': None,
+            'status': 'pending',
+            'finished': False,
+            'error': False
+        }), 200
+
+    # Leer últimas 5000 bytes estilo tail
     try:
-        with open(log_file, 'r') as f:
-            content = f.read()
-        return jsonify({'log': content, 'exists': True}), 200
+        with open(log_file, 'rb') as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            offset = max(size - 5000, 0)
+            f.seek(offset)
+            log_content = f.read().decode(errors="replace")
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f'Error leyendo log: {e}'}), 500
+
+    # Leer PID
+    pid = None
+    if os.path.exists(pid_file):
+        try:
+            with open(pid_file, 'r') as f:
+                pid = f.read().strip()
+        except:
+            pid = None
+
+    # Leer estado
+    status = "running"
+    if os.path.exists(status_file):
+        try:
+            with open(status_file, 'r') as f:
+                status = f.read().strip()
+        except:
+            status = "unknown"
+
+    finished = (status == "success")
+    error = (status == "error")
+
+    return jsonify({
+        'exists': True,
+        'log': log_content,
+        'pid': pid,
+        'status': status,
+        'finished': finished,
+        'error': error
+    }), 200
 
 @instances_bp.route('/update-log/<instance_name>/<action>', methods=['GET'])
 @jwt_required()

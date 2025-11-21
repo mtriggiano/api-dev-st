@@ -1,9 +1,5 @@
 #!/bin/bash
 
-# 🔧 Forzar salida en tiempo real al log y al frontend
-LOG="/tmp/odoo-create-$INSTANCE_NAME.log"
-exec > >(stdbuf -oL -eL tee -a "$LOG") 2>&1
-
 # 🚀 Script de creación de instancia Odoo 19 Community - Versión refactorizada
 # Usa variables de entorno desde archivo .env
 
@@ -48,6 +44,11 @@ INSTANCE=$(echo "$RAW_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g')
 # IMPORTANTE: Las instancias de producción SIEMPRE usan SUBDOMINIOS
 # NUNCA se usa el dominio raíz para proteger el dominio principal
 INSTANCE_NAME="prod-$INSTANCE"
+
+# 🔧 Forzar salida en tiempo real al log y al frontend (correct placement)
+LOG="/tmp/odoo-create-$INSTANCE_NAME.log"
+exec > >(stdbuf -oL -eL tee -a "$LOG") 2>&1
+
 USE_ROOT_DOMAIN=false
 SUBDOMAIN="$INSTANCE.$CF_ZONE_NAME"
 
@@ -348,4 +349,7 @@ PROD_INSTANCES_FILE="${DATA_PATH}/prod-instances.txt"
 echo "$INSTANCE_NAME|19|community|$DOMAIN|$PORT" >> "$PROD_INSTANCES_FILE"
 
 echo "✅ Instancia creada con éxito: https://$DOMAIN"
+# Marcar estado final como SUCCESS para el backend
+STATUS_FILE="/tmp/$INSTANCE_NAME.status"
+echo "success" > "$STATUS_FILE"
 echo "📂 Ver detalles en: $BASE_DIR/info-instancia.txt"

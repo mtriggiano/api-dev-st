@@ -94,26 +94,30 @@ export default function Instances() {
           setUpdateLog({ show: true, instanceName, action, log: 'Iniciando actualizaci\u00f3n...\n', completed: false });
           
           // Polling del log cada 2 segundos
-          const logInterval = setInterval(async () => {
+          if (window._pollingInterval) clearInterval(window._pollingInterval);
+          window._pollingInterval = setInterval(async () => {
             try {
               const logResponse = await instances.getUpdateLog(instanceName, action);
-              
               // Si el log contiene "\u2705" significa que termin\u00f3
               const isCompleted = logResponse.data.log && logResponse.data.log.includes('\u2705');
-              
-              setUpdateLog(prev => ({ 
-                ...prev, 
-                log: logResponse.data.log || 'Esperando...', 
-                completed: isCompleted 
+              setUpdateLog(prev => ({
+                ...prev,
+                log: prev.log + "\n" + (logResponse.data.log || ""),
+                completed: isCompleted
               }));
-              
               if (isCompleted) {
-                clearInterval(logInterval);
+                clearInterval(window._pollingInterval);
+                window._pollingInterval = null;
                 setToast({ show: true, message: 'Actualizaci\u00f3n completada', type: 'success' });
                 fetchInstances();
               }
             } catch (err) {
-              console.error('Error fetching log:', err);
+              console.error('Polling error:', err);
+              setToast({ show: true, message: 'Error obteniendo log, reintentando…', type: 'warning' });
+              if (err?.response?.status === 404) {
+                clearInterval(window._pollingInterval);
+                window._pollingInterval = null;
+              }
             }
           }, 2000);
         }
@@ -202,25 +206,38 @@ export default function Instances() {
       setCreationLog({ show: true, instanceName: newInstanceName, log: 'Iniciando creación...\n' });
       
       // Polling del log cada 2 segundos
-      const logInterval = setInterval(async () => {
+      if (window._pollingInterval) clearInterval(window._pollingInterval);
+      window._pollingInterval = setInterval(async () => {
         try {
           const logResponse = await instances.getCreationLog(newInstanceName);
-          setCreationLog(prev => ({ ...prev, log: logResponse.data.log || 'Esperando...' }));
-          
+          setCreationLog(prev => ({
+            ...prev,
+            log: prev.log + "\n" + (logResponse.data.log || "")
+          }));
           // Si el log contiene el mensaje final significa que terminó
           if (logResponse.data.log && (
             logResponse.data.log.includes('✅ Instancia de desarrollo creada con éxito') ||
             logResponse.data.log.includes('Instancia creada con éxito')
           )) {
-            clearInterval(logInterval);
+            clearInterval(window._pollingInterval);
+            window._pollingInterval = null;
             setTimeout(() => {
+              if (window._pollingInterval) {
+                clearInterval(window._pollingInterval);
+                window._pollingInterval = null;
+              }
               setCreationLog({ show: false, instanceName: '', log: '' });
               setToast({ show: true, message: 'Instancia creada exitosamente', type: 'success' });
               fetchInstances();
             }, 3000);
           }
         } catch (err) {
-          console.error('Error fetching log:', err);
+          console.error('Polling error:', err);
+          setToast({ show: true, message: 'Error obteniendo log, reintentando…', type: 'warning' });
+          if (err?.response?.status === 404) {
+            clearInterval(window._pollingInterval);
+            window._pollingInterval = null;
+          }
         }
       }, 2000);
       
@@ -262,22 +279,35 @@ export default function Instances() {
       setCreationLog({ show: true, instanceName, log: 'Iniciando creación de instancia de producción...\n' });
       
       // Polling del log cada 3 segundos (producción tarda más)
-      const logInterval = setInterval(async () => {
+      if (window._pollingInterval) clearInterval(window._pollingInterval);
+      window._pollingInterval = setInterval(async () => {
         try {
           const logResponse = await instances.getCreationLog(instanceName);
-          setCreationLog(prev => ({ ...prev, log: logResponse.data.log || 'Esperando...' }));
-          
+          setCreationLog(prev => ({
+            ...prev,
+            log: prev.log + "\n" + (logResponse.data.log || "")
+          }));
           // Si el log contiene "✅ ¡INSTANCIA CREADA EXITOSAMENTE!" significa que terminó
           if (logResponse.data.log && (logResponse.data.log.includes('✅ ¡INSTANCIA CREADA EXITOSAMENTE!') || logResponse.data.log.includes('Instancia creada con éxito'))) {
-            clearInterval(logInterval);
+            clearInterval(window._pollingInterval);
+            window._pollingInterval = null;
             setTimeout(() => {
+              if (window._pollingInterval) {
+                clearInterval(window._pollingInterval);
+                window._pollingInterval = null;
+              }
               setCreationLog({ show: false, instanceName: '', log: '' });
               setToast({ show: true, message: `Instancia de producción creada: ${response.data.domain}`, type: 'success' });
               fetchInstances();
             }, 3000);
           }
         } catch (err) {
-          console.error('Error fetching log:', err);
+          console.error('Polling error:', err);
+          setToast({ show: true, message: 'Error obteniendo log, reintentando…', type: 'warning' });
+          if (err?.response?.status === 404) {
+            clearInterval(window._pollingInterval);
+            window._pollingInterval = null;
+          }
         }
       }, 3000);
       
@@ -744,7 +774,13 @@ export default function Instances() {
                 {updateLog.action === 'update-db' ? 'Actualizando Base de Datos' : updateLog.action === 'update-files' ? 'Actualizando Archivos' : updateLog.action === 'sync-filestore' ? 'Sincronizando Filestore' : 'Regenerando Assets'}: {updateLog.instanceName}
               </h3>
               <button
-                onClick={() => setUpdateLog({ show: false, instanceName: '', action: '', log: '', completed: false })}
+                onClick={() => {
+                  if (window._pollingInterval) {
+                    clearInterval(window._pollingInterval);
+                    window._pollingInterval = null;
+                  }
+                  setUpdateLog({ show: false, instanceName: '', action: '', log: '', completed: false });
+                }}
                 className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
               >
                 ✕
@@ -777,7 +813,13 @@ export default function Instances() {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Creando instancia: {creationLog.instanceName}</h3>
               <button
-                onClick={() => setCreationLog({ show: false, instanceName: '', log: '' })}
+                onClick={() => {
+                  if (window._pollingInterval) {
+                    clearInterval(window._pollingInterval);
+                    window._pollingInterval = null;
+                  }
+                  setCreationLog({ show: false, instanceName: '', log: '' });
+                }}
                 className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300"
               >
                 ✕
@@ -1223,3 +1265,13 @@ function InstanceCard({ instance, onAction, onViewLogs, onGitHub, actionLoading,
     </div>
   );
 }
+
+  // Cleanup polling interval when component unmounts
+  useEffect(() => {
+    return () => {
+      if (window._pollingInterval) {
+        clearInterval(window._pollingInterval);
+        window._pollingInterval = null;
+      }
+    };
+  }, []);

@@ -1,5 +1,19 @@
 #!/bin/bash
 
+LOCKFILE="/tmp/odoo-create.lock"
+
+# Lock POSIX (sin flock)
+if [ -f "$LOCKFILE" ]; then
+    echo "❌ Otra creación está en curso. Reintenta en unos segundos."
+    exit 1
+fi
+
+# Crear lockfile
+touch "$LOCKFILE"
+
+# Garantizar limpieza del lock al salir
+trap "rm -f $LOCKFILE" EXIT
+
 # 🚀 Router de creación de instancias Odoo en PRODUCCIÓN (Multi-Versión)
 # Este script llama al script específico según la versión y edición seleccionada
 # IMPORTANTE: Este script SIEMPRE crea instancias en SUBDOMINIOS
@@ -17,6 +31,12 @@ source "$SCRIPT_DIR/../utils/odoo-version-manager.sh"
 
 # Obtener parámetros
 RAW_NAME="$1"
+INSTANCE_NAME="prod-${RAW_NAME,,}"
+STATUS_FILE="/tmp/$INSTANCE_NAME.status"
+echo "running" > "$STATUS_FILE"
+PID_FILE="/tmp/$INSTANCE_NAME.pid"
+echo $$ > "$PID_FILE"
+
 ODOO_VERSION="$2"  # Opcional: 19 o 18 (default: 19)
 ODOO_EDITION="$3"  # Opcional: enterprise o community (default: enterprise)
 SSL_METHOD="$4"   # Opcional: 1=letsencrypt, 2=cloudflare, 3=http

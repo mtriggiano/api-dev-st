@@ -7,7 +7,7 @@ const API_URL = import.meta.env.MODE === 'production'
   : (import.meta.env.VITE_API_URL || 'http://localhost:5000');
 
 const api = axios.create({
-  timeout: 0, // Sin timeout para uploads grandes
+  timeout: 30000, // Timeout seguro para evitar requests colgados
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
@@ -66,7 +66,7 @@ export const instances = {
     api.get('/api/instances'),
   
   get: (name) => 
-    api.get(`/api/instances/${name}`),
+    api.get(`/api/instances/${encodeURIComponent(name)}`),
   
   // Método actualizado: ahora acepta sourceInstance
   create: (name, sourceInstance = null, neutralize = true) => 
@@ -80,34 +80,34 @@ export const instances = {
     api.post('/api/instances/create-production', { name, version, edition, ssl_method: sslMethod }),
   
   delete: (name) => 
-    api.delete(`/api/instances/${name}`),
+    api.delete(`/api/instances/${encodeURIComponent(name)}`),
   
   deleteProduction: (name, confirmation) => 
-    api.delete(`/api/instances/production/${name}`, { data: { confirmation } }),
+    api.delete(`/api/instances/production/${encodeURIComponent(name)}`, { data: { confirmation } }),
   
   updateDb: (name, neutralize = true) => 
-    api.post(`/api/instances/${name}/update-db`, { neutralize }),
+    api.post(`/api/instances/${encodeURIComponent(name)}/update-db`, { neutralize }),
   
   updateFiles: (name) => 
-    api.post(`/api/instances/${name}/update-files`),
+    api.post(`/api/instances/${encodeURIComponent(name)}/update-files`),
   
   syncFilestore: (name) => 
-    api.post(`/api/instances/${name}/sync-filestore`),
+    api.post(`/api/instances/${encodeURIComponent(name)}/sync-filestore`),
   
   regenerateAssets: (name) => 
-    api.post(`/api/instances/${name}/regenerate-assets`),
+    api.post(`/api/instances/${encodeURIComponent(name)}/regenerate-assets`),
   
   getLogs: (name, lines = 100, type = 'systemd') => 
-    api.get(`/api/instances/${name}/logs?lines=${lines}&type=${type}`),
+    api.get(`/api/instances/${encodeURIComponent(name)}/logs?lines=${lines}&type=${type}`),
   
   restart: (name) => 
-    api.post(`/api/instances/${name}/restart`),
+    api.post(`/api/instances/${encodeURIComponent(name)}/restart`),
   
   getCreationLog: (name) => 
-    api.get(`/api/instances/creation-log/${name}`),
+    api.get(`/api/instances/creation-log/${encodeURIComponent(name)}`),
   
   getUpdateLog: (name, action) => 
-    api.get(`/api/instances/update-log/${name}/${action}`),
+    api.get(`/api/instances/update-log/${encodeURIComponent(name)}/${encodeURIComponent(action)}`),
 };
 
 export const logs = {
@@ -237,34 +237,34 @@ export const backupV2 = {
     api.get('/api/backup/v2/instances'),
   
   getInstanceConfig: (instanceName) => 
-    api.get(`/api/backup/v2/instances/${instanceName}/config`),
+    api.get(`/api/backup/v2/instances/${encodeURIComponent(instanceName)}/config`),
   
   updateInstanceConfig: (instanceName, config) => 
-    api.put(`/api/backup/v2/instances/${instanceName}/config`, config),
+    api.put(`/api/backup/v2/instances/${encodeURIComponent(instanceName)}/config`, config),
   
   toggleAutoBackup: (instanceName, enabled) => 
-    api.post(`/api/backup/v2/instances/${instanceName}/toggle`, { enabled }),
+    api.post(`/api/backup/v2/instances/${encodeURIComponent(instanceName)}/toggle`, { enabled }),
   
   // Backups
   listBackups: (instanceName) => 
-    api.get(`/api/backup/v2/instances/${instanceName}/backups`),
+    api.get(`/api/backup/v2/instances/${encodeURIComponent(instanceName)}/backups`),
   
   createBackup: (instanceName) => 
-    api.post(`/api/backup/v2/instances/${instanceName}/backup`),
+    api.post(`/api/backup/v2/instances/${encodeURIComponent(instanceName)}/backup`),
   
   deleteBackup: (instanceName, filename) => 
-    api.delete(`/api/backup/v2/instances/${instanceName}/backups/${filename}`),
+    api.delete(`/api/backup/v2/instances/${encodeURIComponent(instanceName)}/backups/${encodeURIComponent(filename)}`),
   
   downloadBackup: (instanceName, filename) => 
-    api.get(`/api/backup/v2/instances/${instanceName}/backups/${filename}/download`, {
+    api.get(`/api/backup/v2/instances/${encodeURIComponent(instanceName)}/backups/${encodeURIComponent(filename)}/download`, {
       responseType: 'blob'
     }),
   
   restoreBackup: (instanceName, filename) => 
-    api.post(`/api/backup/v2/instances/${instanceName}/restore`, { filename }),
+    api.post(`/api/backup/v2/instances/${encodeURIComponent(instanceName)}/restore`, { filename }),
   
   uploadBackup: (instanceName, formData, onProgress) => 
-    api.post(`/api/backup/v2/instances/${instanceName}/upload`, formData, {
+    api.post(`/api/backup/v2/instances/${encodeURIComponent(instanceName)}/upload`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       },
@@ -273,10 +273,10 @@ export const backupV2 = {
   
   // Logs
   getBackupLog: (instanceName) => 
-    api.get(`/api/backup/v2/instances/${instanceName}/backup-log`),
+    api.get(`/api/backup/v2/instances/${encodeURIComponent(instanceName)}/backup-log`),
   
   getRestoreLog: (instanceName) => 
-    api.get(`/api/backup/v2/instances/${instanceName}/restore-log`),
+    api.get(`/api/backup/v2/instances/${encodeURIComponent(instanceName)}/restore-log`),
   
   // Estadísticas
   getGlobalStats: () => 

@@ -262,24 +262,33 @@ class InstanceManager:
         
         try:
             instance_name = f'prod-{name.lower()}'
+            pid_file = f"/tmp/{instance_name}.pid"
+            status_file = f"/tmp/{instance_name}.status"
             log_file_path = f'/tmp/odoo-create-{instance_name}.log'
             
             # Mapear método SSL a número (1=letsencrypt, 2=cloudflare, 3=http)
             ssl_map = {'letsencrypt': '1', 'cloudflare': '2', 'http': '3'}
             ssl_arg = ssl_map.get(ssl_method, '1')
-            
+
             # Ejecutar script en background desacoplado del proceso padre
             # Argumentos: nombre, version, edition, ssl_method
-            # IMPORTANTE: NO usar 'with' para que el archivo permanezca abierto
-            log_file = open(log_file_path, 'w', buffering=1)  # Line buffering
+            log_fd = os.open(log_file_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
             process = subprocess.Popen(
                 ['/bin/bash', script_path, name, version, edition, ssl_arg],
-                stdout=log_file,
+                stdout=log_fd,
                 stderr=subprocess.STDOUT,
                 start_new_session=True,
-                text=True
+                text=True,
+                bufsize=1
             )
-            # No cerrar log_file - el proceso hijo lo necesita abierto
+            os.close(log_fd)
+
+            # Guardar PID y estado inicial
+            with open(pid_file, 'w') as f:
+                f.write(str(process.pid))
+
+            with open(status_file, 'w') as f:
+                f.write("running")
             
             logger.info(f"Production instance creation started: {instance_name} (Odoo {version} {edition})")
             
@@ -290,7 +299,9 @@ class InstanceManager:
                 'instance_name': instance_name,
                 'domain': f'{name}.{domain_root}',
                 'version': version,
-                'edition': edition
+                'edition': edition,
+                'pid': process.pid,
+                'status_file': status_file
             }
         except Exception as e:
             logger.error(f"Error creating production instance: {e}")

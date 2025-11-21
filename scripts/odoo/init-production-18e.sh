@@ -380,5 +380,8 @@ EOF
 PROD_INSTANCES_FILE="${DATA_PATH}/prod-instances.txt"
 echo "$INSTANCE_NAME|18|enterprise|$DOMAIN|$PORT" >> "$PROD_INSTANCES_FILE"
 
+# Marcar estado final como SUCCESS para el backend
+STATUS_FILE="/tmp/$INSTANCE_NAME.status"
+echo "success" > "$STATUS_FILE"
 echo "✅ Instancia creada con éxito: https://$DOMAIN"
 echo "📂 Ver detalles en: $BASE_DIR/info-instancia.txt"
