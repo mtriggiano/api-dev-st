@@ -35,7 +35,7 @@ if __name__ == '__main__':
         print("\n✅ La base de datos está lista para usar la integración GitHub")
         print("\n📚 Próximos pasos:")
         print("1. Reiniciar el servicio: sudo systemctl restart server-panel-api")
-        print("2. Leer la documentación: cat /home/go/api/GITHUB_INTEGRATION.md")
+        print("2. Leer la documentación: cat /home/mtg/api-dev/GITHUB_INTEGRATION.md")
         print("3. Crear un Personal Access Token en GitHub")
         print("4. Vincular tu cuenta desde el frontend o API")
     else:

@@ -30,7 +30,7 @@ def register_config():
         repo_owner = 'tu-usuario'  # Tu usuario de GitHub
         repo_name = 'tu-repositorio'  # Nombre del repositorio
         repo_branch = 'dev-NOMBRE'  # Rama a usar
-        local_path = '/home/go/apps/develop/odoo/dev-NOMBRE/custom_addons'
+        local_path = '/home/mtg/apps/develop/odoo/dev-NOMBRE/custom_addons'
         
         # Verificar si ya existe una configuración
         existing_config = GitHubConfig.query.filter_by(

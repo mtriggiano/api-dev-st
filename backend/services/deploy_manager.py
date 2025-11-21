@@ -15,7 +15,7 @@ class DeployManager:
     def _init_paths(self):
         """Inicializa las rutas desde la configuración"""
         if not self.dev_root:
-            self.dev_root = current_app.config.get('DEV_ROOT', '/home/go/apps')
+            self.dev_root = current_app.config.get('DEV_ROOT', '/home/mtg/apps/develop/odoo')
     
     def _run_command(self, command: list, cwd: str) -> Dict:
         """Ejecuta un comando y retorna el resultado"""
@@ -85,11 +85,12 @@ class DeployManager:
         
         # Determinar si es producción o desarrollo
         if instance_name.startswith('dev-'):
-            instance_path = os.path.join(self.dev_root, 'develop', 'odoo', instance_name)
+            instance_path = os.path.join(self.dev_root, instance_name)
             service_name = f'odoo19e-{instance_name}'
         else:
-            # Para producción, usar /home/go/apps/production
-            instance_path = f'/home/go/apps/production/odoo/{instance_name}'
+            # Para producción, usar la configuración PROD_ROOT
+            prod_root = current_app.config.get('PROD_ROOT', '/home/mtg/apps/production/odoo')
+            instance_path = os.path.join(prod_root, instance_name)
             service_name = f'odoo19e-{instance_name}'
         
         # Verificar que existe el servicio

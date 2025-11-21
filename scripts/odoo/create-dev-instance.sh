@@ -181,6 +181,7 @@ fi
 
 LOG="/tmp/odoo-create-dev-$INSTANCE_NAME.log"
 exec > >(tee -a "$LOG") 2>&1
+chmod 666 "$LOG"
 
 echo "🚀 Iniciando creación de instancia de desarrollo: $INSTANCE_NAME"
 

@@ -22,14 +22,14 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Server paths - Actualizados para nueva estructura
-    PROJECT_ROOT = os.getenv('PROJECT_ROOT', '/home/go/api-dev')
-    PROD_ROOT = os.getenv('PROD_ROOT', '/home/go/apps/production/odoo')
-    DEV_ROOT = os.getenv('DEV_ROOT', '/home/go/apps/develop/odoo')
+    PROJECT_ROOT = os.getenv('PROJECT_ROOT', '/home/mtg/api-dev')
+    PROD_ROOT = os.getenv('PROD_ROOT', '/home/mtg/apps/production/odoo')
+    DEV_ROOT = os.getenv('DEV_ROOT', '/home/mtg/apps/develop/odoo')
     SCRIPTS_PATH = os.getenv('SCRIPTS_PATH', f'{PROJECT_ROOT}/scripts')
     DATA_PATH = os.getenv('DATA_PATH', f'{PROJECT_ROOT}/data')
     PUERTOS_FILE = os.getenv('PUERTOS_FILE', f'{DATA_PATH}/puertos_ocupados_odoo.txt')
     DEV_INSTANCES_FILE = os.getenv('DEV_INSTANCES_FILE', f'{DATA_PATH}/dev-instances.txt')
-    BACKUPS_PATH = os.getenv('BACKUPS_PATH', '/home/go/backups')
+    BACKUPS_PATH = os.getenv('BACKUPS_PATH', '/home/mtg/backups')
     
     # Domain configuration - IMPORTANTE: El dominio raíz está protegido
     DOMAIN_ROOT = os.getenv('DOMAIN_ROOT', 'softrigx.com')

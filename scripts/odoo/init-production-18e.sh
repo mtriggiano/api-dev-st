@@ -21,7 +21,7 @@ command -v curl >/dev/null 2>&1 || { echo >&2 "❌ 'curl' no está instalado."; 
 
 # Variables desde .env (con valores por defecto para compatibilidad)
 ODOO_ROOT="${PROD_ROOT:-/home/go/apps/production/odoo}"
-REPO="${ODOO18_REPO_PATH:-/home/go/apps/repo/odoo18e.zip}"
+REPO="${ODOO_REPO_PATH:-/home/go/apps/repo/odoo18e.zip}"
 PYTHON="${PYTHON_BIN:-/usr/bin/python3.12}"
 PUERTOS_FILE="${PUERTOS_FILE:-$DATA_PATH/puertos_ocupados_odoo.txt}"
 USER="${SYSTEM_USER:-go}"
