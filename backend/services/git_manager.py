@@ -348,11 +348,22 @@ class GitManager:
                 logger.info(f"Branch {branch} no existe en remoto, creando con push inicial")
                 # Asegurarse de que estamos en la rama correcta
                 self._run_git_command(['git', 'checkout', '-B', branch], local_path)
-                # Hacer commit inicial si no hay commits
-                status = self._run_git_command(['git', 'status', '--porcelain'], local_path)
-                if status['success'] and status['stdout'].strip():
-                    self._run_git_command(['git', 'add', '.'], local_path)
-                    self._run_git_command(['git', 'commit', '-m', 'Initial commit'], local_path)
+                
+                # Verificar si hay commits en la rama
+                log_result = self._run_git_command(['git', 'log', '--oneline', '-1'], local_path)
+                has_commits = log_result['success'] and log_result['stdout'].strip()
+                
+                if not has_commits:
+                    # No hay commits, verificar si hay archivos para commitear
+                    status = self._run_git_command(['git', 'status', '--porcelain'], local_path)
+                    if status['success'] and status['stdout'].strip():
+                        # Hay archivos sin commitear
+                        self._run_git_command(['git', 'add', '.'], local_path)
+                        self._run_git_command(['git', 'commit', '-m', 'Initial commit'], local_path)
+                    else:
+                        # No hay archivos, crear commit vacío para poder hacer push
+                        self._run_git_command(['git', 'commit', '--allow-empty', '-m', 'Initial empty commit'], local_path)
+                
                 # Push inicial
                 push_result = self._run_git_command(['git', 'push', '-u', 'origin', branch], local_path)
                 
