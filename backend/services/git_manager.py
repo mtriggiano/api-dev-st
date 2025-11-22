@@ -20,6 +20,14 @@ class GitManager:
         if not self.dev_root:
             self.dev_root = current_app.config['DEV_ROOT']
     
+    def _convert_to_ssh_url(self, url: str) -> str:
+        """Convierte una URL HTTPS de GitHub a SSH"""
+        if url.startswith('https://github.com/'):
+            # https://github.com/user/repo.git -> git@github.com:user/repo.git
+            path = url.replace('https://github.com/', '')
+            return f'git@github.com:{path}'
+        return url
+    
     def _run_git_command(self, command: List[str], cwd: str) -> Dict:
         """Ejecuta un comando git y retorna el resultado"""
         try:
@@ -147,8 +155,12 @@ class GitManager:
         self._run_git_command(['git', 'config', 'user.name', 'API Dev Panel'], local_path)
         self._run_git_command(['git', 'config', 'user.email', 'dev@panel.local'], local_path)
         
+        # Convertir URL a SSH si es HTTPS de GitHub (para evitar problemas de conectividad)
+        ssh_url = self._convert_to_ssh_url(repo_url)
+        logger.info(f'Usando URL: {ssh_url} (original: {repo_url})')
+        
         # Agregar remote
-        result = self._run_git_command(['git', 'remote', 'add', 'origin', repo_url], local_path)
+        result = self._run_git_command(['git', 'remote', 'add', 'origin', ssh_url], local_path)
         if not result['success']:
             return {'success': False, 'error': f'Error al agregar remote: {result.get("stderr")}'}
         
