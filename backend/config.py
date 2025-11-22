@@ -7,7 +7,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 env_path = project_root / '.env'
 load_dotenv(env_path)
-
+    
 class Config:
     # Flask
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -18,7 +18,7 @@ class Config:
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
     
     # Database
-    SQLALCHEMY_DATABASE_URI = f"postgresql://{os.getenv('DB_USER', 'go')}:{os.getenv('DB_PASSWORD', '!Phax3312!IMAC')}@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}/{os.getenv('DB_NAME', 'server_panel')}"
+    SQLALCHEMY_DATABASE_URI = f"postgresql://{os.getenv('DB_USER', 'mtg')}:{os.getenv('DB_PASSWORD', '!Phax3312!IMAC')}@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}/{os.getenv('DB_NAME', 'server_panel')}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Server paths - Actualizados para nueva estructura
