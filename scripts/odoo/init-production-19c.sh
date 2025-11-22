@@ -204,8 +204,10 @@ fi
 echo "📁 Creando estructura de carpetas en $BASE_DIR..."
 mkdir -p "$BASE_DIR"
 cd "$BASE_DIR" || exit 1
-
+echo "📁 Creando carpeta de instancia y custom_addons en $BASE_DIR..."
+mkdir -p "$BASE_DIR"
 mkdir -p "$BASE_DIR/custom_addons"
+mkdir -p "$BASE_DIR/odoo-server"
 
 # Enlazar addons personalizados globales si existen
 GLOBAL_CUSTOM="/home/$USER/apps/custom_addons_global"
@@ -213,8 +215,27 @@ if [[ -d "$GLOBAL_CUSTOM" ]]; then
   ln -s "$GLOBAL_CUSTOM"/* "$BASE_DIR/custom_addons/" 2>/dev/null || true
 fi
 
-echo "⬇️ Clonando Odoo..."
-stdbuf -oL -eL git clone --depth 1 --branch $ODOO_VERSION $ODOO_REPO odoo-server
+echo "📦 Descomprimiendo repositorio en $BASE_DIR/odoo-server..."
+unzip "$REPO" -d "$BASE_DIR/tmp_unzip"
+cp "$BASE_DIR/tmp_unzip/setup.py" "$BASE_DIR/odoo-server/"
+cp "$BASE_DIR/tmp_unzip/requirements.txt" "$BASE_DIR/odoo-server/requirements.txt"
+cp -r "$BASE_DIR/tmp_unzip/odoo" "$BASE_DIR/odoo-server/"
+cp -r "$BASE_DIR/tmp_unzip/addons" "$BASE_DIR/odoo-server/"
+# Copiar odoo-bin y setup si existen
+if [[ -f "$BASE_DIR/tmp_unzip/odoo-bin" ]]; then
+  cp "$BASE_DIR/tmp_unzip/odoo-bin" "$BASE_DIR/odoo-server/"
+  chmod +x "$BASE_DIR/odoo-server/odoo-bin"
+fi
+if [[ -d "$BASE_DIR/tmp_unzip/setup" ]]; then
+  cp -r "$BASE_DIR/tmp_unzip/setup" "$BASE_DIR/odoo-server/"
+fi
+rm -rf "$BASE_DIR/tmp_unzip"
+
+# Verificar que la carpeta odoo existe
+if [[ ! -d "$BASE_DIR/odoo-server/odoo" ]]; then
+  echo "❌ Error: Carpeta 'odoo' no encontrada en el repositorio descomprimido."
+  exit 1
+fi
 
 echo "🐍 Entorno virtual..."
 $PYTHON -m venv venv
