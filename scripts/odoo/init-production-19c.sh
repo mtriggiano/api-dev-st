@@ -8,6 +8,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../utils/load-env.sh"
 source "$SCRIPT_DIR/../utils/ssl-manager.sh"
+source "$SCRIPT_DIR/../utils/odoo-version-manager.sh"
 
 # Validar variables requeridas
 source "$SCRIPT_DIR/../utils/validate-env.sh" \
@@ -19,11 +20,19 @@ command -v jq >/dev/null 2>&1 || { echo >&2 "❌ 'jq' no está instalado."; exit
 command -v curl >/dev/null 2>&1 || { echo >&2 "❌ 'curl' no está instalado."; exit 1; }
 command -v git >/dev/null 2>&1 || { echo >&2 "❌ 'git' no está instalado."; exit 1; }
 
+# Obtener configuración de versión desde odoo-versions.conf
+REPO=$(get_repo_path "19" "community")
+PYTHON=$(get_python_bin "19" "community")
+
+if [[ -z "$REPO" ]] || [[ ! -f "$REPO" ]]; then
+    echo "❌ ERROR: No se pudo obtener la ruta del repositorio Odoo 19 Community"
+    echo "   Verifica que odoo-versions.conf esté configurado correctamente"
+    list_odoo_versions
+    exit 1
+fi
+
 # Variables desde .env (con valores por defecto para compatibilidad)
-ODOO_ROOT="${PROD_ROOT:-/home/go/apps/production/odoo}"
-ODOO_REPO="https://github.com/odoo/odoo.git"
-ODOO_VERSION="19.0"
-PYTHON="${PYTHON_BIN:-/usr/bin/python3.12}"
+ODOO_ROOT="${PROD_ROOT:-/home/mtg/apps/production/odoo}"
 PUERTOS_FILE="${PUERTOS_FILE:-$DATA_PATH/puertos_ocupados_odoo.txt}"
 USER="${SYSTEM_USER:-go}"
 DB_USER="${DB_USER}"
