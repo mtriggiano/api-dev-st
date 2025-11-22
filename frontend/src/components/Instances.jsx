@@ -57,6 +57,16 @@ export default function Instances() {
     }
   }, [updateLog.log]);
 
+  // Cleanup polling interval when component unmounts
+  useEffect(() => {
+    return () => {
+      if (window._pollingInterval) {
+        clearInterval(window._pollingInterval);
+        window._pollingInterval = null;
+      }
+    };
+  }, []);
+
   const fetchInstances = async () => {
     try {
       const response = await instances.list();
@@ -1265,13 +1275,3 @@ function InstanceCard({ instance, onAction, onViewLogs, onGitHub, actionLoading,
     </div>
   );
 }
-
-  // Cleanup polling interval when component unmounts
-  useEffect(() => {
-    return () => {
-      if (window._pollingInterval) {
-        clearInterval(window._pollingInterval);
-        window._pollingInterval = null;
-      }
-    };
-  }, []);
