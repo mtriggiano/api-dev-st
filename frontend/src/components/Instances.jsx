@@ -5,6 +5,9 @@ import ConfirmModal from './ConfirmModal';
 import Toast from './Toast';
 import GitHubModal from './GitHubModal';
 
+// Modales refactorizados
+import { CreationLogModal, UpdateLogModal } from './instances/modals';
+
 export default function Instances() {
   const [instanceList, setInstanceList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -775,77 +778,31 @@ export default function Instances() {
         </div>
       )}
 
-      {/* Modal de log de actualizaci\u00f3n */}
-      {updateLog.show && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[80vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                {updateLog.action === 'update-db' ? 'Actualizando Base de Datos' : updateLog.action === 'update-files' ? 'Actualizando Archivos' : updateLog.action === 'sync-filestore' ? 'Sincronizando Filestore' : 'Regenerando Assets'}: {updateLog.instanceName}
-              </h3>
-              <button
-                onClick={() => {
-                  if (window._pollingInterval) {
-                    clearInterval(window._pollingInterval);
-                    window._pollingInterval = null;
-                  }
-                  setUpdateLog({ show: false, instanceName: '', action: '', log: '', completed: false });
-                }}
-                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-            {!updateLog.completed ? (
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 mb-4">
-                <p className="text-sm text-blue-800 dark:text-blue-200">
-                  ⏳ La actualización puede tardar varios minutos. El log se actualiza automáticamente.
-                </p>
-              </div>
-            ) : (
-              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg p-3 mb-4">
-                <p className="text-sm text-green-800 dark:text-green-200">
-                  ✅ Actualización completada. Puedes cerrar este modal.
-                </p>
-              </div>
-            )}
-            <pre ref={updateLogRef} className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto flex-1 text-sm font-mono whitespace-pre-wrap">
-              {updateLog.log}
-            </pre>
-          </div>
-        </div>
-      )}
+      {/* Modal de log de actualización */}
+      <UpdateLogModal 
+        updateLog={updateLog}
+        updateLogRef={updateLogRef}
+        onClose={() => {
+          if (window._pollingInterval) {
+            clearInterval(window._pollingInterval);
+            window._pollingInterval = null;
+          }
+          setUpdateLog({ show: false, instanceName: '', action: '', log: '', completed: false });
+        }}
+      />
 
-      {/* Modal de log de creaci\u00f3n */}
-      {creationLog.show && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[80vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Creando instancia: {creationLog.instanceName}</h3>
-              <button
-                onClick={() => {
-                  if (window._pollingInterval) {
-                    clearInterval(window._pollingInterval);
-                    window._pollingInterval = null;
-                  }
-                  setCreationLog({ show: false, instanceName: '', log: '' });
-                }}
-                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-              <p className="text-sm text-blue-800">
-                ⏳ La creación puede tardar varios minutos. El log se actualiza automáticamente.
-              </p>
-            </div>
-            <pre ref={creationLogRef} className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto flex-1 text-sm font-mono whitespace-pre-wrap">
-              {creationLog.log}
-            </pre>
-          </div>
-        </div>
-      )}
+      {/* Modal de log de creación - Componente refactorizado */}
+      <CreationLogModal 
+        creationLog={creationLog}
+        creationLogRef={creationLogRef}
+        onClose={() => {
+          if (window._pollingInterval) {
+            clearInterval(window._pollingInterval);
+            window._pollingInterval = null;
+          }
+          setCreationLog({ show: false, instanceName: '', log: '' });
+        }}
+      />
 
       {/* Modal de logs */}
       {selectedInstance && (
