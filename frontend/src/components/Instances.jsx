@@ -6,7 +6,7 @@ import Toast from './Toast';
 import GitHubModal from './GitHubModal';
 
 // Modales refactorizados
-import { CreationLogModal, UpdateLogModal, CreateDevModal, CreateProdModal } from './instances/modals';
+import { CreationLogModal, UpdateLogModal, CreateDevModal, CreateProdModal, LogsModal } from './instances/modals';
 // Hooks personalizados
 import { useInstances, useCreationLog, useUpdateLog } from './instances/hooks';
 // Componentes de tarjetas
@@ -509,89 +509,16 @@ export default function Instances() {
         onClose={closeCreationLog}
       />
 
-      {/* Modal de logs */}
-      {selectedInstance && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[80vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Logs: {selectedInstance}</h3>
-              <button
-                onClick={() => setSelectedInstance(null)}
-                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-            
-            {/* Pestañas de logs */}
-            <div className="flex gap-2 mb-4 border-b border-gray-200 dark:border-gray-700">
-              <button
-                onClick={() => handleLogTabChange('systemd')}
-                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-                  activeLogTab === 'systemd'
-                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                    : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-                }`}
-              >
-                Systemd Journal
-              </button>
-              <button
-                onClick={() => handleLogTabChange('odoo')}
-                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-                  activeLogTab === 'odoo'
-                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                    : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-                }`}
-              >
-                Odoo Log
-              </button>
-              <button
-                onClick={() => handleLogTabChange('nginx-access')}
-                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-                  activeLogTab === 'nginx-access'
-                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                    : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-                }`}
-              >
-                Nginx Access
-              </button>
-              <button
-                onClick={() => handleLogTabChange('nginx-error')}
-                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-                  activeLogTab === 'nginx-error'
-                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                    : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-                }`}
-              >
-                Nginx Error
-              </button>
-              <button
-                onClick={() => handleLogTabChange('git-deploy')}
-                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-                  activeLogTab === 'git-deploy'
-                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                    : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-                }`}
-              >
-                Git/Deploy
-              </button>
-            </div>
-            
-            {/* Contenido del log */}
-            <div className="flex-1 overflow-hidden flex flex-col">
-              {logsLoading ? (
-                <div className="flex items-center justify-center flex-1">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                </div>
-              ) : (
-                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto flex-1 text-sm font-mono">
-                  {logs}
-                </pre>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal de logs - Componente refactorizado */}
+      <LogsModal
+        show={!!selectedInstance}
+        instanceName={selectedInstance}
+        activeLogTab={activeLogTab}
+        logs={logs}
+        logsLoading={logsLoading}
+        onClose={() => setSelectedInstance(null)}
+        onTabChange={handleLogTabChange}
+      />
 
       {/* Modal de confirmación */}
       <ConfirmModal
