@@ -97,18 +97,29 @@ class BackupManagerV2:
             json.dump(config, f, indent=2)
     
     def _get_all_production_instances(self):
-        """Obtiene todas las instancias de producción del sistema"""
+        """Obtiene todas las instancias de producción del sistema usando el mismo método que instance_manager"""
         prod_instances = []
-        apps_path = '/home/mtg/apps/production'
         
-        if os.path.exists(apps_path):
-            for item in os.listdir(apps_path):
-                item_path = os.path.join(apps_path, item)
-                if os.path.isdir(item_path):
-                    # Verificar si es una instancia de Odoo (tiene odoo-bin)
-                    odoo_bin = os.path.join(item_path, 'odoo-bin')
-                    if os.path.exists(odoo_bin):
-                        prod_instances.append(item)
+        # Importar instance_manager para usar su método de listado
+        try:
+            from services.instance_manager import InstanceManager
+            manager = InstanceManager()
+            instances = manager.list_production_instances()
+            
+            # Extraer solo los nombres de las instancias
+            prod_instances = [inst['name'] for inst in instances]
+            logger.info(f"Found {len(prod_instances)} production instances: {prod_instances}")
+        except Exception as e:
+            logger.error(f"Error getting production instances: {e}")
+            # Fallback: buscar en rutas conocidas
+            prod_root = Config.PROD_ROOT if hasattr(Config, 'PROD_ROOT') else '/home/mtg/apps/production'
+            if os.path.exists(prod_root):
+                for item in os.listdir(prod_root):
+                    item_path = os.path.join(prod_root, item)
+                    if os.path.isdir(item_path):
+                        # Verificar si tiene odoo.conf (indicador de instancia válida)
+                        if os.path.exists(os.path.join(item_path, 'odoo.conf')):
+                            prod_instances.append(item)
         
         return prod_instances
     
