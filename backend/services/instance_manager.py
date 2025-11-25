@@ -205,7 +205,8 @@ class InstanceManager:
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
                     start_new_session=True,
-                    text=True
+                    text=True,
+                    bufsize=1
                 )
                 # Enviar confirmación
                 process.stdin.write('s\n')

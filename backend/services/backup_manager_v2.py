@@ -96,40 +96,62 @@ class BackupManagerV2:
         with open(config_file, 'w') as f:
             json.dump(config, f, indent=2)
     
+    def _get_all_production_instances(self):
+        """Obtiene todas las instancias de producción del sistema"""
+        prod_instances = []
+        apps_path = '/home/mtg/apps/production'
+        
+        if os.path.exists(apps_path):
+            for item in os.listdir(apps_path):
+                item_path = os.path.join(apps_path, item)
+                if os.path.isdir(item_path):
+                    # Verificar si es una instancia de Odoo (tiene odoo-bin)
+                    odoo_bin = os.path.join(item_path, 'odoo-bin')
+                    if os.path.exists(odoo_bin):
+                        prod_instances.append(item)
+        
+        return prod_instances
+    
     def list_instances_with_backups(self):
-        """Lista todas las instancias que tienen configuración de backup"""
+        """Lista todas las instancias de producción con su configuración de backup"""
         instances = []
         
-        if not os.path.exists(self.instances_dir):
-            return {'instances': [], 'total_count': 0}
+        # Obtener todas las instancias de producción del sistema
+        all_prod_instances = self._get_all_production_instances()
         
-        for instance_name in os.listdir(self.instances_dir):
+        # Crear un set con las instancias que ya tienen configuración
+        configured_instances = set()
+        if os.path.exists(self.instances_dir):
+            configured_instances = set(os.listdir(self.instances_dir))
+        
+        # Procesar todas las instancias de producción
+        for instance_name in all_prod_instances:
+            # Cargar o crear configuración (esto crea la carpeta si no existe)
+            config = self._load_instance_config(instance_name)
             instance_dir = self._get_instance_dir(instance_name)
             
-            if os.path.isdir(instance_dir):
-                config = self._load_instance_config(instance_name)
-                
-                # Contar backups
-                pattern = os.path.join(instance_dir, 'backup_*.tar.gz')
-                backup_files = glob.glob(pattern)
-                backup_count = len(backup_files)
-                
-                # Calcular tamaño total
-                total_size = sum(os.path.getsize(f) for f in backup_files)
-                
-                instances.append({
-                    'name': instance_name,
-                    'auto_backup_enabled': config.get('auto_backup_enabled', False),
-                    'schedule': config.get('schedule', '0 3 * * *'),
-                    'retention_days': config.get('retention_days', 7),
-                    'priority': config.get('priority', 'medium'),
-                    'last_backup': config.get('last_backup'),
-                    'last_backup_status': config.get('last_backup_status'),
-                    'backup_count': backup_count,
-                    'total_size_bytes': total_size,
-                    'total_size_mb': round(total_size / (1024 * 1024), 2),
-                    'total_size_human': self._human_readable_size(total_size)
-                })
+            # Contar backups
+            pattern = os.path.join(instance_dir, 'backup_*.tar.gz')
+            backup_files = glob.glob(pattern)
+            backup_count = len(backup_files)
+            
+            # Calcular tamaño total
+            total_size = sum(os.path.getsize(f) for f in backup_files if os.path.exists(f))
+            
+            instances.append({
+                'name': instance_name,
+                'auto_backup_enabled': config.get('auto_backup_enabled', False),
+                'schedule': config.get('schedule', '0 3 * * *'),
+                'retention_days': config.get('retention_days', 7),
+                'priority': config.get('priority', 'medium'),
+                'last_backup': config.get('last_backup'),
+                'last_backup_status': config.get('last_backup_status'),
+                'backup_count': backup_count,
+                'total_size_bytes': total_size,
+                'total_size_mb': round(total_size / (1024 * 1024), 2),
+                'total_size_human': self._human_readable_size(total_size),
+                'is_new': instance_name not in configured_instances  # Indicar si es nueva
+            })
         
         # Ordenar por nombre
         instances.sort(key=lambda x: x['name'])

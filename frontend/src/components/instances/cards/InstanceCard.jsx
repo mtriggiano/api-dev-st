@@ -179,7 +179,7 @@ export default function InstanceCard({
                   <button
                     onClick={() => {
                       setShowMenu(false);
-                      window.location.href = '/backups-v2';
+                      window.location.href = `/backups-v2?instance=${encodeURIComponent(instance.name)}`;
                     }}
                     className="w-full flex items-center gap-3 px-4 py-3 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors rounded-t-lg"
                   >

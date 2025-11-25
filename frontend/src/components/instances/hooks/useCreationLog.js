@@ -41,9 +41,14 @@ export function useCreationLog() {
     window._pollingInterval = setInterval(async () => {
       try {
         const logResponse = await instances.getCreationLog(instanceName);
+        const newLog = logResponse.data.log;
+
         setCreationLog(prev => ({
           ...prev,
-          log: logResponse.data.log || "Log no disponible aún..."
+          log:
+            (newLog === null || newLog === undefined)
+              ? prev.log || "Log no disponible aún..."
+              : (newLog === "" ? prev.log : newLog)
         }));
 
         // Detectar finalización

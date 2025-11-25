@@ -17,6 +17,15 @@ export default function BackupsV2() {
 
   useEffect(() => {
     fetchInstances();
+    
+    // Verificar si hay una instancia en la URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const instanceParam = urlParams.get('instance');
+    if (instanceParam) {
+      // Abrir modal de configuración para esta instancia
+      setTimeout(() => handleConfigure(instanceParam), 500);
+    }
+    
     const interval = setInterval(fetchInstances, 30000);
     return () => clearInterval(interval);
   }, []);
