@@ -401,11 +401,14 @@ class GitManager:
                         'error': f'Error al crear rama en remoto: {push_result.get("stderr")}'
                     }
         
-        # Pull normal
+        # Configurar estrategia de pull (merge por defecto)
+        self._run_git_command(['git', 'config', 'pull.rebase', 'false'], local_path)
+        
+        # Pull normal con estrategia de merge
         if branch:
-            pull_result = self._run_git_command(['git', 'pull', 'origin', branch], local_path)
+            pull_result = self._run_git_command(['git', 'pull', 'origin', branch, '--no-rebase'], local_path)
         else:
-            pull_result = self._run_git_command(['git', 'pull'], local_path)
+            pull_result = self._run_git_command(['git', 'pull', '--no-rebase'], local_path)
         
         # Restaurar URL original si se modificó
         if token and original_url:
