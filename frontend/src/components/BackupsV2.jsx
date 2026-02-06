@@ -1,7 +1,32 @@
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 import { backupV2 } from '../lib/api';
-import { Server, Settings, Download, Trash2, RefreshCw, AlertCircle, Clock, HardDrive, Play, Pause, Database, Upload } from 'lucide-react';
+import { Server, Settings, Download, Trash2, RefreshCw, AlertCircle, Clock, HardDrive, Play, Pause, Database, Upload, Pencil } from 'lucide-react';
 import Toast from './Toast';
+
+// Cliente axios local (api.js está gitignored, pero necesitamos enviar payloads nuevos)
+const API_URL = import.meta.env.MODE === 'production'
+  ? ''
+  : (import.meta.env.VITE_API_URL || 'http://localhost:5000');
+
+const localApi = axios.create({
+  timeout: 30000,
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+localApi.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 export default function BackupsV2() {
   const [instances, setInstances] = useState([]);
@@ -75,8 +100,13 @@ export default function BackupsV2() {
 
   const handleManualBackup = async (instanceName) => {
     try {
+      const customFilename = prompt('Nombre de archivo (opcional). Si lo dejás vacío usa el nombre automático:', '');
+      if (customFilename === null) return;
+
       setBackupProgress({ ...backupProgress, [instanceName]: true });
-      await backupV2.createBackup(instanceName);
+      await localApi.post(`/api/backup/v2/instances/${encodeURIComponent(instanceName)}/backup`, {
+        custom_filename: customFilename || undefined,
+      });
       setToast({ show: true, message: `Backup de ${instanceName} iniciado`, type: 'success' });
       setTimeout(() => {
         fetchInstances();
@@ -85,6 +115,24 @@ export default function BackupsV2() {
     } catch (error) {
       setBackupProgress({ ...backupProgress, [instanceName]: false });
       setToast({ show: true, message: 'Error al crear backup', type: 'error' });
+    }
+  };
+
+  const handleRenameBackup = async (instanceName, oldFilename) => {
+    try {
+      const suggested = oldFilename.replace(/\.tar\.gz$/i, '');
+      const newFilename = prompt(`Nuevo nombre para ${oldFilename}:`, suggested);
+      if (newFilename === null) return;
+
+      await localApi.post(
+        `/api/backup/v2/instances/${encodeURIComponent(instanceName)}/backups/${encodeURIComponent(oldFilename)}/rename`,
+        { new_filename: newFilename }
+      );
+
+      setToast({ show: true, message: 'Backup renombrado', type: 'success' });
+      handleViewBackups(instanceName);
+    } catch (error) {
+      setToast({ show: true, message: error.response?.data?.error || 'Error al renombrar backup', type: 'error' });
     }
   };
 
@@ -208,7 +256,7 @@ export default function BackupsV2() {
       )}
 
       {configModal.show && <ConfigModal instance={configModal.instance} config={configModal.config} onClose={() => setConfigModal({ show: false, instance: null, config: null })} onSave={handleSaveConfig} onChange={(field, value) => setConfigModal({ ...configModal, config: { ...configModal.config, [field]: value } })} />}
-      {backupListModal.show && <BackupListModal instance={backupListModal.instance} backups={backupListModal.backups} onClose={() => setBackupListModal({ show: false, instance: null, backups: [] })} onDownload={handleDownloadBackup} onRestore={handleRestoreBackup} onDelete={handleDeleteBackup} onUpload={() => setShowUploadModal({ show: true, instance: backupListModal.instance })} />}
+      {backupListModal.show && <BackupListModal instance={backupListModal.instance} backups={backupListModal.backups} onClose={() => setBackupListModal({ show: false, instance: null, backups: [] })} onDownload={handleDownloadBackup} onRestore={handleRestoreBackup} onDelete={handleDeleteBackup} onUpload={() => setShowUploadModal({ show: true, instance: backupListModal.instance })} onRename={handleRenameBackup} />}
       {restoreModal.show && <RestoreConfirmModal instance={restoreModal.instance} backup={restoreModal.backup} onClose={() => setRestoreModal({ show: false, instance: null, backup: null })} onConfirm={handleConfirmRestore} />}
       {showUploadModal.show && <UploadModal instance={showUploadModal.instance} onClose={() => setShowUploadModal({ show: false, instance: null })} onUpload={handleUploadBackup} />}
       {toast.show && <Toast message={toast.message} type={toast.type} onClose={() => setToast({ show: false, message: '', type: 'success' })} />}
@@ -362,7 +410,7 @@ function ConfigModal({ instance, config, onClose, onSave, onChange }) {
   );
 }
 
-function BackupListModal({ instance, backups, onClose, onDownload, onRestore, onDelete, onUpload }) {
+function BackupListModal({ instance, backups, onClose, onDownload, onRestore, onDelete, onUpload, onRename }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -387,6 +435,9 @@ function BackupListModal({ instance, backups, onClose, onDownload, onRestore, on
                 <div className="flex gap-2">
                   <button onClick={() => onDownload(instance, backup.filename)} className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title="Descargar">
                     <Download className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => onRename(instance, backup.filename)} className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors" title="Renombrar">
+                    <Pencil className="w-4 h-4" />
                   </button>
                   <button onClick={() => onRestore(instance, backup)} className="p-2 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors" title="Restaurar">
                     <RefreshCw className="w-4 h-4" />

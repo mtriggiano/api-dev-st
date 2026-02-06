@@ -168,13 +168,13 @@ if [ ! -z "$EXISTING_RECORD" ] && [ "$EXISTING_RECORD" != "null" ]; then
   curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$EXISTING_RECORD" \
     -H "Authorization: Bearer $CF_API_TOKEN" \
     -H "Content-Type: application/json" \
-    --data '{"type":"A","name":"'"$DOMAIN"'","content":"'"$PUBLIC_IP"'","ttl":3600,"proxied":true}' >/dev/null
+    --data '{"type":"CNAME","name":"'"$DOMAIN"'","content":"offisla.ddns.net","ttl":3600,"proxied":true}' >/dev/null
   echo "✅ Registro DNS actualizado"
 else
   DNS_RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records" \
     -H "Authorization: Bearer $CF_API_TOKEN" \
     -H "Content-Type: application/json" \
-    --data '{"type":"A","name":"'"$DOMAIN"'","content":"'"$PUBLIC_IP"'","ttl":3600,"proxied":true}')
+    --data '{"type":"CNAME","name":"'"$DOMAIN"'","content":"offisla.ddns.net","ttl":3600,"proxied":true}')
   
   if echo "$DNS_RESPONSE" | jq -e '.success' >/dev/null 2>&1; then
     echo "✅ Registro DNS creado exitosamente"
@@ -261,6 +261,8 @@ echo "🗑️ Limpiando base de datos existente si existe..."
 sudo -u postgres dropdb "$INSTANCE_NAME" 2>/dev/null || true
 echo "🛢️  Creando base de datos $INSTANCE_NAME..."
 sudo -u postgres createdb "$INSTANCE_NAME" -O "$DB_USER" --encoding='UTF8'
+echo "🔌 Instalando extensión vector..."
+sudo -u postgres psql -d "$INSTANCE_NAME" -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
 echo "⚙️ Generando archivo de configuración Odoo..."
 cat > "$ODOO_CONF" <<EOF
@@ -303,9 +305,9 @@ Restart=always
 
 [Install]
 WantedBy=multi-user.target
-" | sudo tee /etc/systemd/system/odoo19c-$INSTANCE_NAME.service > /dev/null
+" | sudo tee /etc/systemd/system/odoo18c-$INSTANCE_NAME.service > /dev/null
 
-if [ ! -f "/etc/systemd/system/odoo19c-$INSTANCE_NAME.service" ]; then
+if [ ! -f "/etc/systemd/system/odoo18c-$INSTANCE_NAME.service" ]; then
   echo "❌ Error crítico: No se pudo crear el archivo de servicio systemd"
   exit 1
 fi
@@ -313,7 +315,7 @@ fi
 echo "🔄 Recargando systemd y habilitando servicio..."
 sudo systemctl daemon-reload
 echo "🌀 Habilitando servicio systemd (sin iniciar aún)..."
-sudo systemctl enable "odoo19c-$INSTANCE_NAME"
+sudo systemctl enable "odoo18c-$INSTANCE_NAME"
 
 # 6. Módulos y assets
 echo "🔌 Cerrando conexiones existentes a la base de datos..."
@@ -346,14 +348,14 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "🚀 Iniciando servicio Odoo..."
-sudo systemctl start "odoo19c-$INSTANCE_NAME"
+stdbuf -oL -eL sudo systemctl start "odoo18c-$INSTANCE_NAME"
 sleep 3
 
-if sudo systemctl is-active --quiet "odoo19c-$INSTANCE_NAME"; then
+if sudo systemctl is-active --quiet "odoo18c-$INSTANCE_NAME"; then
   echo "✅ Servicio Odoo iniciado correctamente."
 else
   echo "❌ Error: El servicio no pudo iniciarse. Revisa los logs:"
-  echo "   sudo journalctl -u odoo19c-$INSTANCE_NAME -n 50"
+  echo "   sudo journalctl -u odoo18c-$INSTANCE_NAME -n 50"
   exit 1
 fi
 
@@ -375,13 +377,13 @@ cat > "$INFO_FILE" <<EOFINFO
 📄 Configuración: $ODOO_CONF
 📝 Log: $ODOO_LOG
 🪵 Log de instalación: $LOG
-🧩 Servicio systemd: odoo19c-$INSTANCE_NAME
-🌀 Logs: sudo journalctl -u odoo19c-$INSTANCE_NAME -n 50 --no-pager
+🧩 Servicio systemd: odoo18c-$INSTANCE_NAME
+🌀 Logs: sudo journalctl -u odoo18c-$INSTANCE_NAME -n 50 --no-pager
 🌐 Nginx: $NGINX_CONF
 🕒 Zona horaria: America/Argentina/Buenos_Aires
 🌐 IP pública: $PUBLIC_IP
-🔁 Reiniciar servicio: sudo systemctl restart odoo19c-$INSTANCE_NAME
-📋 Ver estado:         sudo systemctl status odoo19c-$INSTANCE_NAME
+🔁 Reiniciar servicio: sudo systemctl restart odoo18c-$INSTANCE_NAME
+📋 Ver estado:         sudo systemctl status odoo18c-$INSTANCE_NAME
 📦 Módulos instalados: base, web, base_setup, contacts, l10n_latam_base, l10n_ar, l10n_ar_reports
 EOFINFO
 

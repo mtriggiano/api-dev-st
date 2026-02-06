@@ -49,6 +49,38 @@ def list_instances():
         logger.error(f"Error listing instances: {e}")
         return jsonify({'error': str(e)}), 500
 
+@backup_v2_bp.route('/instances/<instance_name>/backups/<filename>/rename', methods=['POST'])
+@jwt_required()
+def rename_instance_backup(instance_name, filename):
+    """Renombra un backup específico"""
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+
+    if user.role != 'admin':
+        return jsonify({'error': 'Permisos insuficientes'}), 403
+
+    try:
+        data = request.get_json() or {}
+        new_filename = data.get('new_filename')
+        if not new_filename:
+            return jsonify({'error': 'Se requiere new_filename'}), 400
+
+        result = manager.rename_backup(instance_name, filename, new_filename)
+
+        log_action(
+            user_id,
+            'rename_backup',
+            instance_name,
+            f"{filename} -> {new_filename}",
+            'success' if result.get('success') else 'error'
+        )
+
+        return jsonify(result), 200 if result.get('success') else 400
+    except Exception as e:
+        logger.error(f"Error renaming backup {filename} for {instance_name}: {e}")
+        log_action(user_id, 'rename_backup', instance_name, str(e), 'error')
+        return jsonify({'error': str(e)}), 500
+
 @backup_v2_bp.route('/instances/<instance_name>/config', methods=['GET'])
 @jwt_required()
 def get_instance_config(instance_name):
@@ -164,7 +196,10 @@ def create_instance_backup(instance_name):
         return jsonify({'error': 'Permisos insuficientes'}), 403
     
     try:
-        result = manager.create_backup(instance_name)
+        data = request.get_json(silent=True) or {}
+        custom_filename = data.get('custom_filename')
+
+        result = manager.create_backup(instance_name, custom_filename=custom_filename)
         
         log_action(
             user_id,
@@ -224,7 +259,7 @@ def download_instance_backup(instance_name, filename):
         if not os.path.exists(backup_path):
             return jsonify({'error': 'Backup no encontrado'}), 404
         
-        if not filename.startswith('backup_') or not filename.endswith('.tar.gz'):
+        if not manager._is_safe_backup_filename(filename):
             return jsonify({'error': 'Nombre de archivo inválido'}), 400
         
         log_action(user_id, 'download_backup', instance_name, f"Downloaded: {filename}", 'success')

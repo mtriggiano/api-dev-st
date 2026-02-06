@@ -4,6 +4,7 @@ import subprocess
 from datetime import datetime
 import glob
 import logging
+import re
 
 from config import Config
 
@@ -57,6 +58,43 @@ class BackupManagerV2:
     def _get_instance_config_file(self, instance_name):
         """Obtiene el archivo de configuración de una instancia"""
         return os.path.join(self._get_instance_dir(instance_name), 'config.json')
+
+    def _is_safe_backup_filename(self, filename):
+        """Valida que el filename sea seguro y esperado (sin rutas, solo .tar.gz)."""
+        if not filename or not isinstance(filename, str):
+            return False
+
+        # Evitar path traversal / paths absolutos
+        if os.path.basename(filename) != filename:
+            return False
+
+        if filename.startswith('.'):
+            return False
+
+        if not filename.endswith('.tar.gz'):
+            return False
+
+        # Permitimos letras/números/puntos/guiones/underscores. (tar.gz incluye puntos)
+        return re.fullmatch(r"[A-Za-z0-9._-]+\.tar\.gz", filename) is not None
+
+    def _normalize_backup_filename(self, filename):
+        """Normaliza un nombre ingresado por usuario a un filename seguro *.tar.gz."""
+        if not filename or not isinstance(filename, str):
+            return None
+
+        name = filename.strip()
+        if not name:
+            return None
+
+        # Reemplazar caracteres no permitidos por '_'
+        name = re.sub(r"[^A-Za-z0-9._-]+", "_", name)
+        if not name:
+            return None
+
+        if not name.endswith('.tar.gz'):
+            name = f"{name}.tar.gz"
+
+        return name if self._is_safe_backup_filename(name) else None
     
     def _load_instance_config(self, instance_name):
         """Carga la configuración de una instancia"""
@@ -142,7 +180,7 @@ class BackupManagerV2:
             instance_dir = self._get_instance_dir(instance_name)
             
             # Contar backups
-            pattern = os.path.join(instance_dir, 'backup_*.tar.gz')
+            pattern = os.path.join(instance_dir, '*.tar.gz')
             backup_files = glob.glob(pattern)
             backup_count = len(backup_files)
             
@@ -177,7 +215,7 @@ class BackupManagerV2:
         config = self._load_instance_config(instance_name)
         
         # Agregar estadísticas actuales
-        pattern = os.path.join(self._get_instance_dir(instance_name), 'backup_*.tar.gz')
+        pattern = os.path.join(self._get_instance_dir(instance_name), '*.tar.gz')
         backup_files = glob.glob(pattern)
         backup_count = len(backup_files)
         total_size = sum(os.path.getsize(f) for f in backup_files if os.path.exists(f))
@@ -214,7 +252,7 @@ class BackupManagerV2:
             auto_backup_enabled=bool(enabled)
         )
     
-    def create_backup(self, instance_name):
+    def create_backup(self, instance_name, custom_filename=None):
         """Crea un backup manual de una instancia"""
         script_path = os.path.join(self.scripts_path, 'odoo/backup-instance.sh')
         
@@ -229,9 +267,14 @@ class BackupManagerV2:
         config = self._load_instance_config(instance_name)
         
         try:
+            safe_custom = self._normalize_backup_filename(custom_filename) if custom_filename else None
+
             # Ejecutar script en background
             log_file = f'/tmp/odoo-backup-{instance_name}-latest.log'
-            cmd = f"/bin/bash {script_path} {instance_name} > {log_file} 2>&1 &"
+            if safe_custom:
+                cmd = f"/bin/bash {script_path} {instance_name} {safe_custom} > {log_file} 2>&1 &"
+            else:
+                cmd = f"/bin/bash {script_path} {instance_name} > {log_file} 2>&1 &"
             subprocess.Popen(
                 cmd,
                 shell=True,
@@ -253,21 +296,20 @@ class BackupManagerV2:
     def list_backups(self, instance_name):
         """Lista todos los backups de una instancia"""
         instance_dir = self._get_instance_dir(instance_name)
-        pattern = os.path.join(instance_dir, 'backup_*.tar.gz')
+        pattern = os.path.join(instance_dir, '*.tar.gz')
         backups = []
         
         for backup_file in sorted(glob.glob(pattern), reverse=True):
             try:
                 basename = os.path.basename(backup_file)
-                
-                # Extraer timestamp del nombre: backup_YYYYMMDD_HHMMSS.tar.gz
+
+                # Extraer timestamp si aplica al formato default: backup_YYYYMMDD_HHMMSS.tar.gz
+                timestamp = 'unknown'
                 parts = basename.replace('.tar.gz', '').split('_')
-                if len(parts) >= 3:
+                if len(parts) >= 3 and parts[0] == 'backup' and parts[1].isdigit() and parts[2].isdigit():
                     date_str = parts[1]
-                    time_str = parts[2] if len(parts) > 2 else '000000'
+                    time_str = parts[2]
                     timestamp = f"{date_str}_{time_str}"
-                else:
-                    timestamp = 'unknown'
                 
                 # Información del archivo
                 stat = os.stat(backup_file)
@@ -307,7 +349,7 @@ class BackupManagerV2:
         if not os.path.exists(backup_path):
             return {'success': False, 'error': 'Backup no encontrado'}
         
-        if not filename.startswith('backup_') or not filename.endswith('.tar.gz'):
+        if not self._is_safe_backup_filename(filename):
             return {'success': False, 'error': 'Nombre de archivo inválido'}
         
         try:
@@ -338,7 +380,7 @@ class BackupManagerV2:
         if not os.path.exists(backup_path):
             return {'success': False, 'error': 'Backup no encontrado'}
         
-        if not filename.startswith('backup_') or not filename.endswith('.tar.gz'):
+        if not self._is_safe_backup_filename(filename):
             return {'success': False, 'error': 'Nombre de archivo inválido'}
         
         script_path = os.path.join(self.scripts_path, 'odoo/restore-instance.sh')
@@ -364,6 +406,36 @@ class BackupManagerV2:
                 'message': f'Restauración de {instance_name} iniciada',
                 'log_file': log_file,
                 'backup_file': filename
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def rename_backup(self, instance_name, old_filename, new_filename):
+        """Renombra un backup dentro del directorio de la instancia"""
+        if not self._is_safe_backup_filename(old_filename):
+            return {'success': False, 'error': 'Nombre original inválido'}
+
+        normalized_new = self._normalize_backup_filename(new_filename)
+        if not normalized_new:
+            return {'success': False, 'error': 'Nuevo nombre inválido'}
+
+        instance_dir = self._get_instance_dir(instance_name)
+        old_path = os.path.join(instance_dir, old_filename)
+        new_path = os.path.join(instance_dir, normalized_new)
+
+        if not os.path.exists(old_path):
+            return {'success': False, 'error': 'Backup no encontrado'}
+
+        if os.path.exists(new_path):
+            return {'success': False, 'error': 'Ya existe un backup con ese nombre'}
+
+        try:
+            os.rename(old_path, new_path)
+            return {
+                'success': True,
+                'message': 'Backup renombrado',
+                'old_filename': old_filename,
+                'new_filename': normalized_new
             }
         except Exception as e:
             return {'success': False, 'error': str(e)}

@@ -9,10 +9,11 @@ set -e
 
 # Verificar que se proporcionó el nombre de la instancia
 INSTANCE_NAME="$1"
+CUSTOM_FILENAME="$2"
 
 if [ -z "$INSTANCE_NAME" ]; then
   echo "❌ Error: Debe especificar el nombre de la instancia"
-  echo "Uso: $0 <instance_name>"
+  echo "Uso: $0 <instance_name> [custom_filename]"
   exit 1
 fi
 
@@ -55,6 +56,18 @@ FILESTORE_PATH="$FILESTORE_BASE/$DB_NAME"
 # Timestamp para el backup
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 BACKUP_NAME="backup_${TIMESTAMP}"
+
+if [ -n "$CUSTOM_FILENAME" ]; then
+  SAFE_NAME=$(echo "$CUSTOM_FILENAME" | sed -E 's/[^A-Za-z0-9._-]+/_/g')
+  if [ -z "$SAFE_NAME" ]; then
+    echo "❌ Error: Nombre de archivo inválido"
+    exit 1
+  fi
+  if [[ "$SAFE_NAME" != *.tar.gz ]]; then
+    SAFE_NAME="${SAFE_NAME}.tar.gz"
+  fi
+  BACKUP_NAME="${SAFE_NAME%.tar.gz}"
+fi
 BACKUP_PATH="$INSTANCE_BACKUP_DIR/$BACKUP_NAME"
 
 echo "💾 Iniciando backup de $INSTANCE_NAME..."
@@ -102,14 +115,14 @@ echo "✅ Backup completado: ${BACKUP_NAME}.tar.gz ($TOTAL_SIZE)"
 
 # 4. Limpiar backups antiguos según retención
 echo "🧹 Limpiando backups antiguos (retención: $RETENTION_DAYS días)..."
-find "$INSTANCE_BACKUP_DIR" -name "backup_*.tar.gz" -type f -mtime +$RETENTION_DAYS -delete 2>/dev/null
-REMAINING=$(ls -1 "$INSTANCE_BACKUP_DIR"/backup_*.tar.gz 2>/dev/null | wc -l)
+find "$INSTANCE_BACKUP_DIR" -name "*.tar.gz" -type f -mtime +$RETENTION_DAYS -delete 2>/dev/null
+REMAINING=$(ls -1 "$INSTANCE_BACKUP_DIR"/*.tar.gz 2>/dev/null | wc -l)
 echo "✅ Backups restantes: $REMAINING"
 
 # 5. Actualizar configuración de la instancia
 if command -v jq >/dev/null 2>&1 && [ -f "$CONFIG_FILE" ]; then
   CURRENT_DATE=$(date '+%Y-%m-%d %H:%M:%S')
-  TOTAL_SIZE_ALL=$(du -sb "$INSTANCE_BACKUP_DIR"/backup_*.tar.gz 2>/dev/null | awk '{sum+=$1} END {print sum}')
+  TOTAL_SIZE_ALL=$(du -sb "$INSTANCE_BACKUP_DIR"/*.tar.gz 2>/dev/null | awk '{sum+=$1} END {print sum}')
   
   jq --arg date "$CURRENT_DATE" \
      --arg status "success" \

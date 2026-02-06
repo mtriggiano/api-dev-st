@@ -8,9 +8,11 @@ import os
 import hmac
 import hashlib
 import secrets
+import logging
 
 github_bp = Blueprint('github', __name__)
 git_manager = GitManager()
+logger = logging.getLogger(__name__)
 
 def log_action(user_id, action, instance_name=None, details=None, status='success'):
     """Registra una acción en el log"""
@@ -185,15 +187,43 @@ def create_config():
         
         db.session.commit()
         
-        # Si es una instancia de producción y no tiene .git, clonar el repositorio automáticamente
+        # Manejar inicialización/verificación del repositorio Git
         git_dir = os.path.join(local_path, '.git')
         clone_attempted = False
         clone_result = None
+        repo_url = f"https://github.com/{data['repo_owner']}/{data['repo_name']}.git"
         
-        if data['instance_name'].startswith('prod-') and not os.path.exists(git_dir):
+        if os.path.exists(git_dir):
+            # El repositorio ya existe, verificar y limpiar el remote si es necesario
+            logger.info(f"Repositorio Git ya existe en {local_path}, verificando configuración...")
+            
+            # Obtener URL actual del remote
+            remote_check = git_manager._run_git_command(['git', 'remote', 'get-url', 'origin'], local_path)
+            
+            if remote_check['success']:
+                current_url = remote_check['stdout']
+                # Limpiar URL si tiene credenciales embebidas
+                clean_url = git_manager._clean_url(current_url)
+                
+                # Si la URL está corrupta o es diferente, actualizarla
+                if clean_url != current_url or clean_url != repo_url:
+                    logger.info(f"Actualizando remote de {current_url} a {repo_url}")
+                    git_manager._run_git_command(['git', 'remote', 'set-url', 'origin', repo_url], local_path)
+                    clone_result = {'success': True, 'message': 'Remote actualizado correctamente'}
+                else:
+                    clone_result = {'success': True, 'message': 'Repositorio ya configurado correctamente'}
+            else:
+                # No existe remote origin, agregarlo
+                logger.info(f"Agregando remote origin: {repo_url}")
+                git_manager._run_git_command(['git', 'remote', 'add', 'origin', repo_url], local_path)
+                clone_result = {'success': True, 'message': 'Remote agregado correctamente'}
+            
+            clone_attempted = True
+            
+        elif data['instance_name'].startswith('prod-'):
+            # No existe .git, clonar el repositorio automáticamente para producción
             logger.info(f"Clonando repositorio automáticamente para {data['instance_name']}")
             clone_attempted = True
-            repo_url = f"https://github.com/{data['repo_owner']}/{data['repo_name']}.git"
             
             # Intentar clonar el repositorio
             clone_result = git_manager.clone_repo(
@@ -212,7 +242,7 @@ def create_config():
             user_id,
             action,
             data['instance_name'],
-            f"Repo: {data['repo_owner']}/{data['repo_name']}" + (f" - Clonado: {clone_result['success']}" if clone_attempted else ""),
+            f"Repo: {data['repo_owner']}/{data['repo_name']}" + (f" - {clone_result.get('message', 'OK')}" if clone_attempted else ""),
             'success'
         )
         
@@ -410,7 +440,7 @@ def reconfigure_config(instance_name):
 @github_bp.route('/init-repo', methods=['POST'])
 @jwt_required()
 def init_repo():
-    """Inicializa un repositorio Git en la carpeta local"""
+    """Inicializa o verifica un repositorio Git en la carpeta local"""
     user_id = int(get_jwt_identity())
     user = User.query.get(user_id)
     
@@ -433,13 +463,63 @@ def init_repo():
         
         # Construir URL del repo
         repo_url = f"https://github.com/{config.repo_owner}/{config.repo_name}.git"
+        git_dir = os.path.join(config.local_path, '.git')
         
-        # Inicializar repo
-        result = git_manager.init_git_repo(
-            config.local_path,
-            repo_url,
-            config.repo_branch
-        )
+        # Si ya existe el repositorio, verificar y limpiar el remote
+        if os.path.exists(git_dir):
+            logger.info(f"Repositorio Git ya existe en {config.local_path}, verificando configuración...")
+            
+            # Obtener URL actual del remote
+            remote_check = git_manager._run_git_command(['git', 'remote', 'get-url', 'origin'], config.local_path)
+            
+            if remote_check['success']:
+                current_url = remote_check['stdout']
+                # Limpiar URL si tiene credenciales embebidas
+                clean_url = git_manager._clean_url(current_url)
+                
+                # Si la URL está corrupta o es diferente, actualizarla
+                if clean_url != current_url or clean_url != repo_url:
+                    logger.info(f"Actualizando remote de {current_url} a {repo_url}")
+                    update_result = git_manager._run_git_command(['git', 'remote', 'set-url', 'origin', repo_url], config.local_path)
+                    
+                    if update_result['success']:
+                        result = {
+                            'success': True,
+                            'message': f'Repositorio ya existe. Remote actualizado correctamente a {repo_url}'
+                        }
+                    else:
+                        result = {
+                            'success': False,
+                            'error': f'No se pudo actualizar el remote: {update_result.get("stderr")}'
+                        }
+                else:
+                    result = {
+                        'success': True,
+                        'message': 'Repositorio ya existe y está configurado correctamente'
+                    }
+            else:
+                # No existe remote origin, agregarlo
+                logger.info(f"Agregando remote origin: {repo_url}")
+                add_result = git_manager._run_git_command(['git', 'remote', 'add', 'origin', repo_url], config.local_path)
+                
+                if add_result['success']:
+                    result = {
+                        'success': True,
+                        'message': f'Remote origin agregado: {repo_url}'
+                    }
+                else:
+                    result = {
+                        'success': False,
+                        'error': f'No se pudo agregar el remote: {add_result.get("stderr")}'
+                    }
+        else:
+            # No existe .git, inicializar normalmente
+            result = git_manager.init_git_repo(
+                config.local_path,
+                repo_url,
+                config.repo_branch,
+                config.github_access_token
+            )
         
         if result['success']:
             log_action(user_id, 'init_git_repo', data['instance_name'], result['message'], 'success')
@@ -585,6 +665,31 @@ def pull():
         
         if not config:
             return jsonify({'error': 'Configuración no encontrada'}), 404
+        
+        # Verificar si el repositorio está inicializado
+        git_dir = os.path.join(config.local_path, '.git')
+        if not os.path.exists(git_dir):
+            logger.info(f"Repositorio no inicializado en {config.local_path}, inicializando...")
+            
+            # Construir URL del repo
+            repo_url = f"https://github.com/{config.repo_owner}/{config.repo_name}.git"
+            
+            # Inicializar repo con token
+            init_result = git_manager.init_git_repo(
+                config.local_path,
+                repo_url,
+                config.repo_branch,
+                config.github_access_token
+            )
+            
+            if not init_result['success']:
+                log_action(user_id, 'git_pull', data['instance_name'], f"Error al inicializar: {init_result.get('error')}", 'error')
+                return jsonify({
+                    'success': False,
+                    'error': f"No se pudo inicializar el repositorio: {init_result.get('error')}"
+                }), 400
+            
+            logger.info(f"Repositorio inicializado exitosamente en {config.local_path}")
         
         result = git_manager.pull_changes(
             config.local_path,

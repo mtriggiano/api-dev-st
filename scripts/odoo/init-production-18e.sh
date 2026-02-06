@@ -153,13 +153,13 @@ if [ ! -z "$EXISTING_RECORD" ] && [ "$EXISTING_RECORD" != "null" ]; then
   curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$EXISTING_RECORD" \
     -H "Authorization: Bearer $CF_API_TOKEN" \
     -H "Content-Type: application/json" \
-    --data '{"type":"A","name":"'"$DOMAIN"'","content":"'"$PUBLIC_IP"'","ttl":3600,"proxied":true}' >/dev/null
+    --data '{"type":"CNAME","name":"'"$DOMAIN"'","content":"offisla.ddns.net","ttl":3600,"proxied":true}' >/dev/null
   echo "✅ Registro DNS actualizado"
 else
   DNS_RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records" \
     -H "Authorization: Bearer $CF_API_TOKEN" \
     -H "Content-Type: application/json" \
-    --data '{"type":"A","name":"'"$DOMAIN"'","content":"'"$PUBLIC_IP"'","ttl":3600,"proxied":true}')
+    --data '{"type":"CNAME","name":"'"$DOMAIN"'","content":"offisla.ddns.net","ttl":3600,"proxied":true}')
   
   if echo "$DNS_RESPONSE" | jq -e '.success' >/dev/null 2>&1; then
     echo "✅ Registro DNS creado exitosamente"
@@ -264,6 +264,8 @@ echo "🗑️ Limpiando base de datos existente si existe..."
 sudo -u postgres dropdb "$INSTANCE_NAME" 2>/dev/null || true
 echo "🛢️  Creando base de datos $INSTANCE_NAME..."
 sudo -u postgres createdb "$INSTANCE_NAME" -O "$DB_USER" --encoding='UTF8'
+echo "🔌 Instalando extensión vector..."
+sudo -u postgres psql -d "$INSTANCE_NAME" -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
 echo "⚙️ Generando archivo de configuración Odoo..."
 cat > "$ODOO_CONF" <<EOF
@@ -290,7 +292,7 @@ chown -R $USER:$USER "$BASE_DIR"
 
 echo "⚙️ Creando servicio systemd para Odoo..."
 echo "[Unit]
-Description=Odoo 19e Instance - $INSTANCE_NAME
+Description=Odoo 18e Instance - $INSTANCE_NAME
 After=network.target
 
 [Service]

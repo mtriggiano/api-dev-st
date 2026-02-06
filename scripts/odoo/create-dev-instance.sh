@@ -223,7 +223,7 @@ APP_DIR="$BASE_DIR"
 echo "🌍 IP pública configurada: $PUBLIC_IP"
 CF_ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$CF_ZONE_NAME" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" | /usr/bin/jq -r '.result[0].id')
 echo "🌐 Configurando DNS en Cloudflare para $DOMAIN..."
-curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data '{"type":"A","name":"'"$DOMAIN"'","content":"'"$PUBLIC_IP"'","ttl":3600,"proxied":true}' >/dev/null
+curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data '{"type":"CNAME","name":"'"$DOMAIN"'","content":"offisla.ddns.net","ttl":3600,"proxied":true}' >/dev/null
 
 echo "🛰️  Esperando propagación DNS..."
 sleep 5
@@ -259,6 +259,8 @@ echo "   Creando dump de $PROD_DB..."
 sudo -u postgres pg_dump "$PROD_DB" > "/tmp/${DB_NAME}_dump.sql"
 echo "   Creando base de datos $DB_NAME..."
 sudo -u postgres createdb "$DB_NAME" -O "$DB_USER" --encoding='UTF8'
+echo "   Instalando extensión vector..."
+sudo -u postgres psql -d "$DB_NAME" -c "CREATE EXTENSION IF NOT EXISTS vector;"
 echo "   Restaurando datos..."
 sudo -u postgres psql -d "$DB_NAME" < "/tmp/${DB_NAME}_dump.sql"
 rm -f "/tmp/${DB_NAME}_dump.sql"

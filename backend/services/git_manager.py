@@ -2,8 +2,10 @@ import os
 import subprocess
 import requests
 import logging
+import re
 from typing import Dict, List, Optional
 from flask import current_app
+from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,38 @@ class GitManager:
             path = url.replace('https://github.com/', '')
             return f'git@github.com:{path}'
         return url
+    
+    def _clean_url(self, url: str) -> str:
+        """Limpia una URL removiendo credenciales embebidas"""
+        # Remover cualquier credencial existente en la URL
+        # https://token@github.com/user/repo.git -> https://github.com/user/repo.git
+        # https://user:pass@github.com/user/repo.git -> https://github.com/user/repo.git
+        cleaned = re.sub(r'https://[^@]+@', 'https://', url)
+        return cleaned
+    
+    def _add_token_to_url(self, url: str, token: str) -> str:
+        """Agrega un token a una URL HTTPS de forma segura"""
+        # Primero limpiar la URL de cualquier credencial existente
+        clean_url = self._clean_url(url)
+        
+        # Validar que sea una URL HTTPS válida
+        if not clean_url.startswith('https://'):
+            return clean_url
+        
+        # Parsear la URL
+        parsed = urlparse(clean_url)
+        
+        # Validar que tenga un hostname válido
+        if not parsed.netloc or '/' in parsed.netloc:
+            logger.error(f"URL inválida detectada: {clean_url}")
+            return clean_url
+        
+        # Construir nueva URL con token
+        # https://github.com -> https://TOKEN@github.com
+        new_netloc = f"{token}@{parsed.netloc}"
+        new_parsed = parsed._replace(netloc=new_netloc)
+        
+        return urlunparse(new_parsed)
     
     def _run_git_command(self, command: List[str], cwd: str) -> Dict:
         """Ejecuta un comando git y retorna el resultado"""
@@ -140,7 +174,7 @@ class GitManager:
         else:
             return result
     
-    def init_git_repo(self, local_path: str, repo_url: str, branch: str = 'main') -> Dict:
+    def init_git_repo(self, local_path: str, repo_url: str, branch: str = 'main', token: str = None) -> Dict:
         """Inicializa un repositorio Git en la carpeta local"""
         if not os.path.exists(local_path):
             return {'success': False, 'error': f'La ruta {local_path} no existe'}
@@ -160,12 +194,12 @@ class GitManager:
         self._run_git_command(['git', 'config', 'user.name', 'API Dev Panel'], local_path)
         self._run_git_command(['git', 'config', 'user.email', 'dev@panel.local'], local_path)
         
-        # Convertir URL a SSH si es HTTPS de GitHub (para evitar problemas de conectividad)
-        ssh_url = self._convert_to_ssh_url(repo_url)
-        logger.info(f'Usando URL: {ssh_url} (original: {repo_url})')
+        # Siempre usar la URL limpia sin token para el remote
+        # El token se manejará temporalmente en cada operación (pull/push)
+        logger.info(f'Configurando remote con URL: {repo_url}')
         
-        # Agregar remote
-        result = self._run_git_command(['git', 'remote', 'add', 'origin', ssh_url], local_path)
+        # Agregar remote sin token
+        result = self._run_git_command(['git', 'remote', 'add', 'origin', repo_url], local_path)
         if not result['success']:
             return {'success': False, 'error': f'Error al agregar remote: {result.get("stderr")}'}
         
@@ -302,10 +336,11 @@ class GitManager:
             # Configurar token temporalmente
             remote_result = self._run_git_command(['git', 'remote', 'get-url', 'origin'], local_path)
             if remote_result['success'] and remote_result['stdout'].startswith('https://'):
-                # Actualizar URL con token
+                # Actualizar URL con token de forma segura
                 original_url = remote_result['stdout']
-                auth_url = original_url.replace('https://', f'https://{token}@')
-                self._run_git_command(['git', 'remote', 'set-url', 'origin', auth_url], local_path)
+                auth_url = self._add_token_to_url(original_url, token)
+                if auth_url != original_url:  # Solo actualizar si cambió
+                    self._run_git_command(['git', 'remote', 'set-url', 'origin', auth_url], local_path)
         
         # Push
         if branch:
@@ -340,8 +375,9 @@ class GitManager:
             remote_result = self._run_git_command(['git', 'remote', 'get-url', 'origin'], local_path)
             if remote_result['success'] and remote_result['stdout'].startswith('https://'):
                 original_url = remote_result['stdout']
-                auth_url = original_url.replace('https://', f'https://{token}@')
-                self._run_git_command(['git', 'remote', 'set-url', 'origin', auth_url], local_path)
+                auth_url = self._add_token_to_url(original_url, token)
+                if auth_url != original_url:  # Solo actualizar si cambió
+                    self._run_git_command(['git', 'remote', 'set-url', 'origin', auth_url], local_path)
         
         # Verificar si la rama existe en el remoto
         if branch:
@@ -409,6 +445,14 @@ class GitManager:
             pull_result = self._run_git_command(['git', 'pull', 'origin', branch, '--no-rebase'], local_path)
         else:
             pull_result = self._run_git_command(['git', 'pull', '--no-rebase'], local_path)
+        
+        # Si falla por historias no relacionadas, intentar con --allow-unrelated-histories
+        if not pull_result['success'] and 'unrelated histories' in pull_result.get('stderr', ''):
+            logger.info("Detectado error de historias no relacionadas, reintentando con --allow-unrelated-histories")
+            if branch:
+                pull_result = self._run_git_command(['git', 'pull', 'origin', branch, '--no-rebase', '--allow-unrelated-histories'], local_path)
+            else:
+                pull_result = self._run_git_command(['git', 'pull', '--no-rebase', '--allow-unrelated-histories'], local_path)
         
         # Restaurar URL original si se modificó
         if token and original_url:

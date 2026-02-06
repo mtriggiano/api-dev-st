@@ -128,20 +128,23 @@ else
     -H "Authorization: Bearer $CF_API_TOKEN" \
     -H "Content-Type: application/json")
   
-  DNS_RECORD_ID=$(echo "$DNS_RESPONSE" | jq -r '.result[0].id')
+  # Obtener todos los IDs (puede haber múltiples)
+  DNS_RECORD_IDS=$(echo "$DNS_RESPONSE" | jq -r '.result[].id')
   
-  if [[ "$DNS_RECORD_ID" != "null" && -n "$DNS_RECORD_ID" ]]; then
-    echo "   Encontrado registro DNS con ID: $DNS_RECORD_ID"
-    DELETE_RESPONSE=$(curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$DNS_RECORD_ID" \
-      -H "Authorization: Bearer $CF_API_TOKEN" \
-      -H "Content-Type: application/json")
-    
-    if echo "$DELETE_RESPONSE" | jq -e '.success' >/dev/null 2>&1; then
-      echo "✅ Registro DNS $DOMAIN eliminado de Cloudflare."
-    else
-      echo "⚠️  Error al eliminar registro DNS:"
-      echo "   $(echo $DELETE_RESPONSE | jq -r '.errors[0].message' 2>/dev/null || echo 'Sin detalles')"
-    fi
+  if [[ -n "$DNS_RECORD_IDS" ]]; then
+    for DNS_RECORD_ID in $DNS_RECORD_IDS; do
+      echo "   Encontrado registro DNS con ID: $DNS_RECORD_ID"
+      DELETE_RESPONSE=$(curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$DNS_RECORD_ID" \
+        -H "Authorization: Bearer $CF_API_TOKEN" \
+        -H "Content-Type: application/json")
+      
+      if echo "$DELETE_RESPONSE" | jq -e '.success' >/dev/null 2>&1; then
+        echo "✅ Registro DNS $DOMAIN (ID: $DNS_RECORD_ID) eliminado de Cloudflare."
+      else
+        echo "⚠️  Error al eliminar registro DNS (ID: $DNS_RECORD_ID):"
+        echo "   $(echo $DELETE_RESPONSE | jq -r '.errors[0].message' 2>/dev/null || echo 'Sin detalles')"
+      fi
+    done
   else
     echo "⚠️  No se encontró registro DNS para $DOMAIN en Cloudflare."
     echo "   Respuesta de API: $(echo $DNS_RESPONSE | jq -r '.result | length') registros encontrados"
