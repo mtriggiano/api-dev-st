@@ -3,7 +3,6 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Instances from './components/Instances';
 import Logs from './components/Logs';
-import Backups from './components/Backups';
 import BackupsV2 from './components/BackupsV2';
 import Layout from './components/Layout';
 
@@ -50,11 +49,7 @@ function App() {
         <Route
           path="/backups"
           element={
-            <PrivateRoute>
-              <Layout>
-                <Backups />
-              </Layout>
-            </PrivateRoute>
+            <Navigate to="/backups-v2" />
           }
         />
         <Route

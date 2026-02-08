@@ -21,6 +21,21 @@ NC='\033[0m' # No Color
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 BACKUP_DIR="/tmp/api-dev-backup-$(date +%Y%m%d_%H%M%S)"
 
+UPDATE_MODE="github"
+NON_INTERACTIVE=false
+if [ "$1" = "--local" ] || [ "$1" = "local" ] || [ "$1" = "--no-pull" ]; then
+    UPDATE_MODE="local"
+elif [ "$1" = "--github" ] || [ "$1" = "github" ] || [ -z "$1" ]; then
+    UPDATE_MODE="github"
+else
+    echo "Uso: $0 [--github|--local]"
+    exit 1
+fi
+
+if [ "$2" = "--non-interactive" ] || [ "$2" = "--yes" ] || [ "$2" = "-y" ]; then
+    NON_INTERACTIVE=true
+fi
+
 # Cargar variables del .env
 if [ -f "$PROJECT_ROOT/.env" ]; then
     # shellcheck source=/dev/null
@@ -184,20 +199,32 @@ print_header "PASO 2: Actualizar Código desde Git"
 
 cd "$PROJECT_ROOT"
 
-# Verificar estado de Git
-if [ -n "$(git status --porcelain)" ]; then
-    print_warning "Hay cambios locales sin commitear"
-    echo ""
-    git status --short
-    echo ""
-    read -p "¿Descartar cambios locales y continuar? (s/n): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Ss]$ ]]; then
-        git reset --hard
-        print_info "Cambios locales descartados"
-    else
-        print_error "Actualización cancelada"
-        exit 1
+# Guardar commit actual para detectar cambios post-pull
+PREV_HEAD=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+print_info "Commit local antes de actualizar: $PREV_HEAD"
+
+if [ "$UPDATE_MODE" = "github" ]; then
+    if [ -n "$(git status --porcelain)" ]; then
+        print_warning "Hay cambios locales sin commitear"
+        echo ""
+        git status --short
+        echo ""
+        read -p "¿Descartar cambios locales y continuar? (s/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Ss]$ ]]; then
+            git reset --hard
+            print_info "Cambios locales descartados"
+        else
+            print_error "Actualización cancelada"
+            exit 1
+        fi
+    fi
+else
+    if [ -n "$(git status --porcelain)" ]; then
+        print_info "Modo local: se conservarán los cambios locales"
+        echo ""
+        git status --short
+        echo ""
     fi
 fi
 
@@ -205,14 +232,20 @@ fi
 CURRENT_BRANCH=$(git branch --show-current)
 print_info "Rama actual: $CURRENT_BRANCH"
 
-# Pull de cambios
-print_info "Descargando cambios..."
-if git pull origin "$CURRENT_BRANCH"; then
-    print_success "Código actualizado desde Git"
+if [ "$UPDATE_MODE" = "github" ]; then
+    print_info "Descargando cambios..."
+    if git pull origin "$CURRENT_BRANCH"; then
+        print_success "Código actualizado desde Git"
+    else
+        print_error "Error al hacer pull desde Git"
+        exit 1
+    fi
 else
-    print_error "Error al hacer pull desde Git"
-    exit 1
+    print_info "Modo local: no se descargan cambios desde Git"
 fi
+
+NEW_HEAD=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+print_info "Commit local después de actualizar: $NEW_HEAD"
 
 # Mostrar últimos commits
 echo ""
@@ -256,9 +289,13 @@ if [ -d "migrations" ]; then
             echo "  - $(basename $migration)"
         done
         echo ""
-        read -p "¿Ejecutar migraciones? (s/n): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Ss]$ ]]; then
+        if [ "$NON_INTERACTIVE" = true ]; then
+            print_warning "Modo no interactivo: migraciones omitidas"
+        else
+            read -p "¿Ejecutar migraciones? (s/n): " -n 1 -r
+            echo
+        fi
+        if [ "$NON_INTERACTIVE" = false ] && [[ $REPLY =~ ^[Ss]$ ]]; then
             echo "$MIGRATIONS" | while read migration; do
                 print_info "Ejecutando: $(basename $migration)"
                 if python "$migration"; then
@@ -284,7 +321,18 @@ print_header "PASO 4: Actualizar Frontend"
 cd "$PROJECT_ROOT/frontend"
 
 # Verificar si hay cambios en package.json
-if git diff HEAD@{1} HEAD -- package.json | grep -q "^+.*\""; then
+PKG_CHANGED=false
+if [ "$UPDATE_MODE" = "github" ]; then
+    if [ "$PREV_HEAD" != "unknown" ] && [ "$NEW_HEAD" != "unknown" ] && ! git diff --quiet "$PREV_HEAD" "$NEW_HEAD" -- package.json; then
+        PKG_CHANGED=true
+    fi
+else
+    if ! git diff --quiet -- package.json; then
+        PKG_CHANGED=true
+    fi
+fi
+
+if [ "$PKG_CHANGED" = true ]; then
     print_info "Detectados cambios en dependencias del frontend"
     print_info "Instalando dependencias de Node.js..."
     if npm install; then
@@ -340,6 +388,18 @@ if systemctl is-active --quiet nginx; then
     fi
 fi
 
+# Si hay un frontend en modo dev (Vite) corriendo, reiniciarlo para que tome cambios
+if pgrep -f "npm.*dev" > /dev/null 2>&1; then
+    print_info "Detectado frontend en modo dev (Vite). Reiniciando para aplicar cambios..."
+    if "$PROJECT_ROOT/scripts/utils/restart-services.sh" frontend; then
+        print_success "Frontend dev reiniciado"
+    else
+        print_warning "No se pudo reiniciar el frontend dev"
+    fi
+else
+    print_info "Frontend dev (Vite) no detectado. Si estás usando http://localhost:5173, reiniciá con: $PROJECT_ROOT/restart.sh"
+fi
+
 # ========================================
 # PASO 6: VERIFICACIONES POST-ACTUALIZACIÓN
 # ========================================
@@ -385,6 +445,9 @@ print_success "✅ Frontend reconstruido"
 print_success "✅ Servicios reiniciados"
 echo ""
 
+print_info "🔖 Commit desplegado: $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+print_info "🕒 Último commit: $(git log -1 --oneline 2>/dev/null || echo unknown)"
+
 print_info "📦 Backup guardado en: $BACKUP_DIR"
 echo ""
 
@@ -399,10 +462,14 @@ echo "   psql $DB_NAME_PANEL < $BACKUP_DIR/database.sql"
 echo "   sudo systemctl restart server-panel-api"
 echo ""
 
-read -p "¿Corregir ahora la configuración de Nginx para una instancia de Odoo en este servidor? (s/n): " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Ss]$ ]]; then
-    fix_odoo_nginx || print_error "No se pudo corregir Nginx de Odoo"
+if [ "$NON_INTERACTIVE" = true ]; then
+    print_info "Modo no interactivo: omitida corrección de Nginx"
+else
+    read -p "¿Corregir ahora la configuración de Nginx para una instancia de Odoo en este servidor? (s/n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Ss]$ ]]; then
+        fix_odoo_nginx || print_error "No se pudo corregir Nginx de Odoo"
+    fi
 fi
 
 print_section "Nuevas Funcionalidades en esta Versión"
