@@ -4,6 +4,7 @@ import { Server, Play, Square, Trash2, RefreshCw, Database, FileText, Plus, Eye,
 import ConfirmModal from './ConfirmModal';
 import Toast from './Toast';
 import GitHubModal from './GitHubModal';
+import LogViewer from './LogViewer';
 
 // Modales refactorizados
 import { CreationLogModal, UpdateLogModal, CreateDevModal, CreateProdModal, LogsModal } from './instances/modals';
@@ -42,6 +43,7 @@ export default function Instances() {
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [restartModal, setRestartModal] = useState({ show: false, instanceName: '', status: 'Reiniciando...' });
   const [githubModal, setGithubModal] = useState({ show: false, instanceName: '' });
+  const [logViewerInstance, setLogViewerInstance] = useState(null);
   const [deleteProductionModal, setDeleteProductionModal] = useState({ show: false, instanceName: '', confirmation: '', step: 1 });
   const [filterByProduction, setFilterByProduction] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -384,6 +386,7 @@ export default function Instances() {
                   onAction={showConfirmation}
                   onViewLogs={handleViewLogs}
                   onGitHub={(instanceName) => setGithubModal({ show: true, instanceName })}
+                  onOpenLogViewer={(name) => setLogViewerInstance(name)}
                   actionLoading={actionLoading}
                   isProduction={true}
                 />
@@ -410,6 +413,7 @@ export default function Instances() {
                   onAction={showConfirmation}
                   onViewLogs={handleViewLogs}
                   onGitHub={(instanceName) => setGithubModal({ show: true, instanceName })}
+                  onOpenLogViewer={(name) => setLogViewerInstance(name)}
                   actionLoading={actionLoading}
                   isProduction={false}
                 />
@@ -515,6 +519,14 @@ export default function Instances() {
           message={toast.message}
           type={toast.type}
           onClose={() => setToast({ show: false, message: '', type: 'success' })}
+        />
+      )}
+
+      {/* Visor de Logs Odoo */}
+      {logViewerInstance && (
+        <LogViewer
+          instanceName={logViewerInstance}
+          onClose={() => setLogViewerInstance(null)}
         />
       )}
 

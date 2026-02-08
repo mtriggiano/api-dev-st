@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Server, RefreshCw, Database, FileText, FolderSync, Palette, Trash2, Eye, Github, GitCommit, Settings } from 'lucide-react';
+import { Server, RefreshCw, Database, FileText, FolderSync, Palette, Trash2, Eye, Github, GitCommit, Settings, Terminal } from 'lucide-react';
 import { github } from '../../../lib/api';
 
 /**
@@ -10,6 +10,7 @@ export default function InstanceCard({
   onAction, 
   onViewLogs, 
   onGitHub, 
+  onOpenLogViewer,
   actionLoading, 
   isProduction 
 }) {
@@ -148,11 +149,11 @@ export default function InstanceCard({
         )}
         
         <button
-          onClick={() => onViewLogs(instance.name)}
-          title="Ver los logs del servicio systemd"
-          className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          onClick={() => onOpenLogViewer(instance.name)}
+          title="Visor de logs Odoo con colores y filtros"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
         >
-          <Eye className="w-4 h-4" />
+          <Terminal className="w-4 h-4" />
           <span className="hidden sm:inline">Logs</span>
         </button>
         

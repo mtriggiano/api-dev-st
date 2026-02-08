@@ -1036,7 +1036,8 @@ def get_current_commit(instance_name):
                     'short_hash': current_commit['hash'][:7],
                     'message': current_commit['message'],
                     'author': current_commit['author'],
-                    'date': current_commit['date'],
+                    'date': current_commit['timestamp'],
+                    'email': current_commit.get('email', ''),
                     'branch': config.repo_branch
                 },
                 'last_deploy': config.last_deploy_at.isoformat() if config.last_deploy_at else None
