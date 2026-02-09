@@ -25,6 +25,7 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [showResetHardConfirm, setShowResetHardConfirm] = useState(false);
   const [resetHardBranch, setResetHardBranch] = useState('');
+  const [resetHardConfirmed, setResetHardConfirmed] = useState(false);
   
   // Webhook states
   const [showWebhookConfig, setShowWebhookConfig] = useState(false);
@@ -1384,10 +1385,8 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
                     type="checkbox"
                     id="confirmReset"
                     className="rounded"
-                    onChange={(e) => {
-                      const button = document.getElementById('resetHardButton');
-                      button.disabled = !e.target.checked;
-                    }}
+                    checked={resetHardConfirmed}
+                    onChange={(e) => setResetHardConfirmed(e.target.checked)}
                   />
                   <label htmlFor="confirmReset" className="text-sm text-yellow-800 dark:text-yellow-200">
                     Entiendo que perderé TODOS mis cambios locales
@@ -1400,8 +1399,9 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
                     onClick={() => {
                       handlePull(resetHardBranch, false, true);
                       setShowResetHardConfirm(false);
+                      setResetHardConfirmed(false);
                     }}
-                    disabled={true}
+                    disabled={!resetHardConfirmed}
                     className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {gitLoading ? 'Sobrescribiendo...' : '🔄 SOBRESCRIBIR RAMA'}
@@ -1410,6 +1410,7 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
                     onClick={() => {
                       setShowResetHardConfirm(false);
                       setResetHardBranch('');
+                      setResetHardConfirmed(false);
                     }}
                     disabled={gitLoading}
                     className="flex-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
