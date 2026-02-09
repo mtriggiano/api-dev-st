@@ -1311,7 +1311,7 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
 
         {/* Modal de confirmación de Reset */}
         {showResetConfirm && (
-          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">
             <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm mx-4">
               <div className="flex items-center gap-3 mb-4">
                 <div className="bg-yellow-100 dark:bg-yellow-900/30 p-2 rounded-lg">
@@ -1346,7 +1346,7 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
 
         {/* Modal de confirmación de Reset Hard */}
         {showResetHardConfirm && (
-          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">
             <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md mx-4">
               <div className="flex items-center gap-3 mb-4">
                 <div className="bg-red-100 dark:bg-red-900/30 p-2 rounded-lg">
@@ -1425,7 +1425,7 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
 
         {/* Modal de confirmación de Delete */}
         {showDeleteConfirm && (
-          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">
             <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm mx-4">
               <div className="flex items-center gap-3 mb-4">
                 <div className="bg-red-100 dark:bg-red-900/30 p-2 rounded-lg">
