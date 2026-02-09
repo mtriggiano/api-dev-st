@@ -298,8 +298,11 @@ class BackupManagerV2:
         instance_dir = self._get_instance_dir(instance_name)
         pattern = os.path.join(instance_dir, '*.tar.gz')
         backups = []
-        
-        for backup_file in sorted(glob.glob(pattern), reverse=True):
+
+        backup_files = glob.glob(pattern)
+        backup_files.sort(key=lambda p: os.path.getmtime(p) if os.path.exists(p) else 0, reverse=True)
+
+        for backup_file in backup_files:
             try:
                 basename = os.path.basename(backup_file)
 

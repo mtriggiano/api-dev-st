@@ -70,11 +70,18 @@ restart_frontend() {
         sleep 1
         echo -e "${GREEN}✅ Frontend detenido${NC}"
     fi
+
+    PORT_PIDS=$(lsof -tiTCP:5173 -sTCP:LISTEN 2>/dev/null || true)
+    if [ -n "$PORT_PIDS" ]; then
+        echo -e "${YELLOW}🛑 Liberando puerto 5173...${NC}"
+        echo "$PORT_PIDS" | xargs -r kill -9 2>/dev/null || true
+        sleep 1
+    fi
     
     # Iniciar frontend
     echo -e "${YELLOW}🚀 Iniciando frontend...${NC}"
     cd "$PROJECT_ROOT/frontend"
-    nohup npm run dev > /tmp/frontend-dev.log 2>&1 &
+    nohup npm run dev -- --port 5173 --strictPort > /tmp/frontend-dev.log 2>&1 &
     sleep 3
     
     # Verificar que esté corriendo
@@ -108,8 +115,10 @@ show_status() {
     # Frontend
     if pgrep -f "npm.*dev" > /dev/null; then
         FRONTEND_PID=$(pgrep -f "npm.*dev" | head -1)
+        FRONTEND_URL=$(grep -m 1 -E "➜[[:space:]]+Local:" /tmp/frontend-dev.log 2>/dev/null | awk '{print $3}')
+        FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173/}
         echo -e "${GREEN}✅ Frontend: Corriendo (PID: $FRONTEND_PID)${NC}"
-        echo -e "   URL: http://localhost:5173/"
+        echo -e "   URL: $FRONTEND_URL"
     else
         echo -e "${RED}❌ Frontend: No está corriendo${NC}"
     fi
