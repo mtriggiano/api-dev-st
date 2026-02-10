@@ -326,7 +326,7 @@ class GitManager:
             }
     
     def push_changes(self, local_path: str, branch: str = None, token: str = None) -> Dict:
-        """Hace push de los commits al repositorio remoto"""
+        """Hace push de los commits al repositorio remoto. Si falla por non-fast-forward, hace pull --no-rebase y reintenta."""
         if not os.path.exists(os.path.join(local_path, '.git')):
             return {'success': False, 'error': 'No es un repositorio Git'}
         
@@ -342,27 +342,56 @@ class GitManager:
                 if auth_url != original_url:  # Solo actualizar si cambió
                     self._run_git_command(['git', 'remote', 'set-url', 'origin', auth_url], local_path)
         
-        # Push
-        if branch:
-            push_result = self._run_git_command(['git', 'push', 'origin', branch], local_path)
-        else:
-            push_result = self._run_git_command(['git', 'push'], local_path)
-        
-        # Restaurar URL original si se modificó
-        if token and original_url:
-            self._run_git_command(['git', 'remote', 'set-url', 'origin', original_url], local_path)
-        
-        if push_result['success']:
-            return {
-                'success': True,
-                'message': 'Push exitoso',
-                'output': push_result['stderr']  # Git push usa stderr para output
-            }
-        else:
-            return {
-                'success': False,
-                'error': f'Error al hacer push: {push_result.get("stderr")}'
-            }
+        try:
+            # Push
+            if branch:
+                push_result = self._run_git_command(['git', 'push', 'origin', branch], local_path)
+            else:
+                push_result = self._run_git_command(['git', 'push'], local_path)
+            
+            # Si falla por non-fast-forward, hacer pull --no-rebase y reintentar
+            if not push_result['success'] and 'non-fast-forward' in push_result.get('stderr', ''):
+                # Auto-pull
+                if branch:
+                    pull_result = self._run_git_command(['git', 'pull', '--no-rebase', 'origin', branch], local_path)
+                else:
+                    pull_result = self._run_git_command(['git', 'pull', '--no-rebase'], local_path)
+                
+                if not pull_result['success']:
+                    return {
+                        'success': False,
+                        'error': f'Error al hacer auto-pull antes de push: {pull_result.get("stderr")}'
+                    }
+                
+                # Reintentar push
+                if branch:
+                    push_result = self._run_git_command(['git', 'push', 'origin', branch], local_path)
+                else:
+                    push_result = self._run_git_command(['git', 'push'], local_path)
+                
+                if push_result['success']:
+                    return {
+                        'success': True,
+                        'message': 'Push exitoso (auto-pull realizado)',
+                        'warning': 'Se hizo pull automático antes de push porque la rama remota tenía cambios nuevos',
+                        'output': push_result['stderr']
+                    }
+            
+            if push_result['success']:
+                return {
+                    'success': True,
+                    'message': 'Push exitoso',
+                    'output': push_result['stderr']  # Git push usa stderr para output
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': f'Error al hacer push: {push_result.get("stderr")}'
+                }
+        finally:
+            # Restaurar URL original si se modificó
+            if token and original_url:
+                self._run_git_command(['git', 'remote', 'set-url', 'origin', original_url], local_path)
     
     def pull_changes(self, local_path: str, branch: str = None, token: str = None) -> Dict:
         """Hace pull de los cambios del repositorio remoto"""
