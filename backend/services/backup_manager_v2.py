@@ -60,7 +60,7 @@ class BackupManagerV2:
         return os.path.join(self._get_instance_dir(instance_name), 'config.json')
 
     def _is_safe_backup_filename(self, filename):
-        """Valida que el filename sea seguro y esperado (sin rutas, solo .tar.gz)."""
+        """Valida que el filename sea seguro y esperado (sin rutas, .tar.gz o .zip)."""
         if not filename or not isinstance(filename, str):
             return False
 
@@ -71,14 +71,22 @@ class BackupManagerV2:
         if filename.startswith('.'):
             return False
 
-        if not filename.endswith('.tar.gz'):
-            return False
+        if filename.endswith('.tar.gz'):
+            # Permitimos letras/números/puntos/guiones/underscores. (tar.gz incluye puntos)
+            return re.fullmatch(r"[A-Za-z0-9._-]+\.tar\.gz", filename) is not None
 
-        # Permitimos letras/números/puntos/guiones/underscores. (tar.gz incluye puntos)
-        return re.fullmatch(r"[A-Za-z0-9._-]+\.tar\.gz", filename) is not None
+        if filename.endswith('.zip'):
+            return re.fullmatch(r"[A-Za-z0-9._-]+\.zip", filename) is not None
 
-    def _normalize_backup_filename(self, filename):
-        """Normaliza un nombre ingresado por usuario a un filename seguro *.tar.gz."""
+        return False
+
+    def _normalize_backup_filename(self, filename, default_ext='.tar.gz'):
+        """Normaliza un nombre ingresado por usuario a un filename seguro.
+
+        default_ext:
+        - '.tar.gz' (default)
+        - '.zip'
+        """
         if not filename or not isinstance(filename, str):
             return None
 
@@ -91,10 +99,12 @@ class BackupManagerV2:
         if not name:
             return None
 
-        if not name.endswith('.tar.gz'):
-            name = f"{name}.tar.gz"
+        if name.endswith('.tar.gz') or name.endswith('.zip'):
+            normalized = name
+        else:
+            normalized = f"{name}{default_ext}"
 
-        return name if self._is_safe_backup_filename(name) else None
+        return normalized if self._is_safe_backup_filename(normalized) else None
     
     def _load_instance_config(self, instance_name):
         """Carga la configuración de una instancia"""
@@ -296,10 +306,12 @@ class BackupManagerV2:
     def list_backups(self, instance_name):
         """Lista todos los backups de una instancia"""
         instance_dir = self._get_instance_dir(instance_name)
-        pattern = os.path.join(instance_dir, '*.tar.gz')
         backups = []
 
-        backup_files = glob.glob(pattern)
+        patterns = [os.path.join(instance_dir, '*.tar.gz'), os.path.join(instance_dir, '*.zip')]
+        backup_files = []
+        for pattern in patterns:
+            backup_files.extend(glob.glob(pattern))
         backup_files.sort(key=lambda p: os.path.getmtime(p) if os.path.exists(p) else 0, reverse=True)
 
         for backup_file in backup_files:
@@ -308,7 +320,13 @@ class BackupManagerV2:
 
                 # Extraer timestamp si aplica al formato default: backup_YYYYMMDD_HHMMSS.tar.gz
                 timestamp = 'unknown'
-                parts = basename.replace('.tar.gz', '').split('_')
+                base_no_ext = basename
+                if base_no_ext.endswith('.tar.gz'):
+                    base_no_ext = base_no_ext[:-len('.tar.gz')]
+                elif base_no_ext.endswith('.zip'):
+                    base_no_ext = base_no_ext[:-len('.zip')]
+
+                parts = base_no_ext.split('_')
                 if len(parts) >= 3 and parts[0] == 'backup' and parts[1].isdigit() and parts[2].isdigit():
                     date_str = parts[1]
                     time_str = parts[2]
@@ -390,11 +408,49 @@ class BackupManagerV2:
         
         if not os.path.exists(script_path):
             return {'success': False, 'error': 'Script de restauración no encontrado'}
-        
+
         try:
+            restore_path = backup_path
+
+            # Si es ZIP (Odoo.sh), convertir a TAR.GZ (formato esperado por restore-instance.sh)
+            if filename.endswith('.zip'):
+                import tarfile
+                import zipfile
+                import tempfile
+                import shutil
+
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                temp_extract_dir = os.path.join(tempfile.gettempdir(), f"odoo-zip-restore-{instance_name}-{timestamp}")
+                os.makedirs(temp_extract_dir, exist_ok=True)
+
+                try:
+                    with zipfile.ZipFile(backup_path, 'r') as zip_ref:
+                        zip_ref.extractall(temp_extract_dir)
+
+                    # Validar estructura básica
+                    has_dump = False
+                    for root, _dirs, files in os.walk(temp_extract_dir):
+                        if 'dump.sql' in files:
+                            has_dump = True
+                            break
+                    if not has_dump:
+                        shutil.rmtree(temp_extract_dir)
+                        return {'success': False, 'error': 'El backup .zip no contiene dump.sql'}
+
+                    converted_name = f"restore_from_zip_{timestamp}.tar.gz"
+                    restore_path = os.path.join(instance_dir, converted_name)
+
+                    with tarfile.open(restore_path, 'w:gz') as tar:
+                        for item in os.listdir(temp_extract_dir):
+                            tar.add(os.path.join(temp_extract_dir, item), arcname=item)
+
+                finally:
+                    if os.path.exists(temp_extract_dir):
+                        shutil.rmtree(temp_extract_dir)
+
             # Ejecutar script de restauración en background
             log_file = f'/tmp/odoo-restore-{instance_name}-latest.log'
-            cmd = f"/bin/bash {script_path} {instance_name} {backup_path} > {log_file} 2>&1 &"
+            cmd = f"/bin/bash {script_path} {instance_name} {restore_path} > {log_file} 2>&1 &"
             subprocess.Popen(
                 cmd,
                 shell=True,
@@ -418,7 +474,8 @@ class BackupManagerV2:
         if not self._is_safe_backup_filename(old_filename):
             return {'success': False, 'error': 'Nombre original inválido'}
 
-        normalized_new = self._normalize_backup_filename(new_filename)
+        default_ext = '.zip' if old_filename.endswith('.zip') else '.tar.gz'
+        normalized_new = self._normalize_backup_filename(new_filename, default_ext=default_ext)
         if not normalized_new:
             return {'success': False, 'error': 'Nuevo nombre inválido'}
 

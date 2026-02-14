@@ -264,11 +264,13 @@ def download_instance_backup(instance_name, filename):
         
         log_action(user_id, 'download_backup', instance_name, f"Downloaded: {filename}", 'success')
         
+        mimetype = 'application/zip' if filename.endswith('.zip') else 'application/gzip'
+
         return send_file(
             backup_path,
             as_attachment=True,
             download_name=filename,
-            mimetype='application/gzip'
+            mimetype=mimetype
         )
     except Exception as e:
         logger.error(f"Error downloading backup {filename} for {instance_name}: {e}")
