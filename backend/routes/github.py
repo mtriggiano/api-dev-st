@@ -1070,8 +1070,8 @@ def get_branches(instance_name):
         if not config:
             return jsonify({'error': 'No hay configuración de GitHub para esta instancia'}), 404
         
-        # Obtener ramas del repositorio remoto usando git ls-remote
-        result = git_manager.get_remote_branches(instance_name)
+        # Obtener ramas del repositorio remoto usando la ruta configurada
+        result = git_manager.get_remote_branches(config.local_path)
         
         if not result['success']:
             return jsonify({'error': result.get('error', 'Error al obtener ramas')}), 500

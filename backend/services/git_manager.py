@@ -551,15 +551,13 @@ class GitManager:
                 'error': f'Error al obtener diff: {result.get("stderr")}'
             }
     
-    def get_remote_branches(self, instance_name: str) -> Dict:
+    def get_remote_branches(self, local_path: str) -> Dict:
         """Obtiene las ramas disponibles del repositorio remoto"""
-        self._init_paths()
-        local_path = os.path.join(self.dev_root, instance_name)
         
-        if not os.path.exists(local_path):
+        if not local_path or not os.path.exists(local_path):
             return {
                 'success': False,
-                'error': 'La instancia no existe'
+                'error': 'La ruta local del repositorio no existe'
             }
         
         # Obtener ramas remotas usando git ls-remote
