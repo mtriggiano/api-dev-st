@@ -199,6 +199,9 @@ class InstanceManager:
             # Agregar auto-confirm como cuarto argumento (modo no interactivo)
             script_args.append('true')
             
+            # Agregar rama Git como quinto argumento (opcional)
+            script_args.append(git_branch if git_branch else '')
+            
             # El nombre de la instancia completa incluye el prefijo "dev-"
             instance_name = f'dev-{name}'
             log_file_path = f'/tmp/odoo-create-{instance_name}.log'
@@ -213,20 +216,7 @@ class InstanceManager:
                     text=True,
                     bufsize=1
                 )
-            logger.info(f"Process started for dev instance {instance_name} from source {source_instance or 'default'} (neutralize={neutralize})")
-            
-            # Guardar rama Git en archivo de configuración si se especificó
-            if git_branch:
-                instance_path = os.path.join(self.dev_root, instance_name)
-                config_file = os.path.join(instance_path, '.git-branch')
-                try:
-                    # Crear directorio si no existe (puede que el script aún no lo haya creado)
-                    os.makedirs(instance_path, exist_ok=True)
-                    with open(config_file, 'w') as f:
-                        f.write(git_branch)
-                    logger.info(f"Saved default Git branch '{git_branch}' for {instance_name}")
-                except Exception as e:
-                    logger.warning(f"Could not save Git branch config: {e}")
+            logger.info(f"Process started for dev instance {instance_name} from source {source_instance or 'default'} (neutralize={neutralize}, git_branch={git_branch or 'default'})")
             
             return {
                 'success': True,

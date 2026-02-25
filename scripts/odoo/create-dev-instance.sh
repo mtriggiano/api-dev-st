@@ -878,6 +878,12 @@ fi
 # Registrar instancia de desarrollo
 echo "$INSTANCE_NAME|$PORT|$DB_NAME|$(date '+%Y-%m-%d %H:%M:%S')" >> "$DEV_INSTANCES_FILE"
 
+# Guardar rama Git si se especificó como quinto argumento
+if [[ -n "$5" ]]; then
+  echo "$5" > "$BASE_DIR/.git-branch"
+  echo "✅ Rama Git configurada: $5"
+fi
+
 echo ""
 echo "✅ Instancia de desarrollo creada con éxito: https://$DOMAIN"
 echo "📂 Ver detalles en: $BASE_DIR/info-instancia.txt"
