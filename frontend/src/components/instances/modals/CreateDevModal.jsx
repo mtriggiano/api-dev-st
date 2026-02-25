@@ -1,4 +1,5 @@
-import { AlertCircle, GitBranch } from 'lucide-react';
+import { AlertCircle, GitBranch, Search } from 'lucide-react';
+import { useState, useMemo } from 'react';
 
 /**
  * Modal para crear instancias de desarrollo
@@ -18,6 +19,19 @@ export default function CreateDevModal({
   productionInstances,
   actionLoading
 }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Filtrar instancias de producción según búsqueda
+  const filteredInstances = useMemo(() => {
+    if (!searchTerm.trim()) return productionInstances;
+    
+    const search = searchTerm.toLowerCase();
+    return productionInstances.filter(instance => 
+      instance.name.toLowerCase().includes(search) ||
+      (instance.domain && instance.domain.toLowerCase().includes(search))
+    );
+  }, [productionInstances, searchTerm]);
+  
   if (!show) return null;
 
   return (
@@ -32,19 +46,40 @@ export default function CreateDevModal({
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Clonar desde:
           </label>
+          
+          {/* Campo de búsqueda */}
+          <div className="relative mb-2">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar instancia..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
+            />
+          </div>
+          
+          {/* Selector con instancias filtradas */}
           <select
             value={selectedSourceInstance}
             onChange={(e) => setSelectedSourceInstance(e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            size={Math.min(filteredInstances.length, 6)}
           >
-            {productionInstances.map((instance) => (
-              <option key={instance.name} value={instance.name}>
-                {instance.name} {instance.domain ? `(${instance.domain})` : ''}
-              </option>
-            ))}
+            {filteredInstances.length > 0 ? (
+              filteredInstances.map((instance) => (
+                <option key={instance.name} value={instance.name}>
+                  {instance.name} {instance.domain ? `(${instance.domain})` : ''}
+                </option>
+              ))
+            ) : (
+              <option disabled>No se encontraron instancias</option>
+            )}
           </select>
+          
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Se clonará la base de datos y archivos de esta instancia
+            {filteredInstances.length} de {productionInstances.length} instancias
+            {searchTerm && ` · Filtrando por "${searchTerm}"`}
           </p>
         </div>
         
