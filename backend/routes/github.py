@@ -1064,7 +1064,7 @@ def get_branches(instance_name):
         config = GitHubConfig.query.filter_by(
             user_id=user_id,
             instance_name=instance_name,
-            active=True
+            is_active=True
         ).first()
         
         if not config:
