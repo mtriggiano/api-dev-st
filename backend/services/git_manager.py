@@ -551,7 +551,7 @@ class GitManager:
                 'error': f'Error al obtener diff: {result.get("stderr")}'
             }
     
-    def get_remote_branches(self, local_path: str) -> Dict:
+    def get_remote_branches(self, local_path: str, token: str = None) -> Dict:
         """Obtiene las ramas disponibles del repositorio remoto"""
         
         if not local_path or not os.path.exists(local_path):
@@ -560,8 +560,21 @@ class GitManager:
                 'error': 'La ruta local del repositorio no existe'
             }
         
+        original_url = None
+        if token:
+            remote_result = self._run_git_command(['git', 'remote', 'get-url', 'origin'], local_path)
+            if remote_result['success'] and remote_result['stdout'].startswith('https://'):
+                original_url = remote_result['stdout']
+                auth_url = self._add_token_to_url(original_url, token)
+                if auth_url != original_url:
+                    self._run_git_command(['git', 'remote', 'set-url', 'origin', auth_url], local_path)
+
         # Obtener ramas remotas usando git ls-remote
         result = self._run_git_command(['git', 'ls-remote', '--heads', 'origin'], local_path)
+
+        # Restaurar URL original si se modificó
+        if token and original_url:
+            self._run_git_command(['git', 'remote', 'set-url', 'origin', original_url], local_path)
         
         if not result['success']:
             return {
