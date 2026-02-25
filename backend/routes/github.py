@@ -1049,6 +1049,42 @@ def get_current_commit(instance_name):
         return jsonify({'error': str(e)}), 500
 
 
+@github_bp.route('/branches/<instance_name>', methods=['GET'])
+@jwt_required()
+def get_branches(instance_name):
+    """Obtiene las ramas disponibles del repositorio remoto"""
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    
+    if user.role not in ['admin', 'developer']:
+        return jsonify({'error': 'Permisos insuficientes'}), 403
+    
+    try:
+        # Obtener configuración de GitHub
+        config = GitHubConfig.query.filter_by(
+            user_id=user_id,
+            instance_name=instance_name,
+            active=True
+        ).first()
+        
+        if not config:
+            return jsonify({'error': 'No hay configuración de GitHub para esta instancia'}), 404
+        
+        # Obtener ramas del repositorio remoto usando git ls-remote
+        result = git_manager.get_remote_branches(instance_name)
+        
+        if not result['success']:
+            return jsonify({'error': result.get('error', 'Error al obtener ramas')}), 500
+        
+        return jsonify({
+            'success': True,
+            'branches': result.get('branches', [])
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @github_bp.route('/deploy-logs/<instance_name>', methods=['GET'])
 @jwt_required()
 def get_deploy_logs(instance_name):

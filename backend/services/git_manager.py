@@ -550,3 +550,40 @@ class GitManager:
                 'success': False,
                 'error': f'Error al obtener diff: {result.get("stderr")}'
             }
+    
+    def get_remote_branches(self, instance_name: str) -> Dict:
+        """Obtiene las ramas disponibles del repositorio remoto"""
+        self._init_paths()
+        local_path = os.path.join(self.dev_root, instance_name)
+        
+        if not os.path.exists(local_path):
+            return {
+                'success': False,
+                'error': 'La instancia no existe'
+            }
+        
+        # Obtener ramas remotas usando git ls-remote
+        result = self._run_git_command(['git', 'ls-remote', '--heads', 'origin'], local_path)
+        
+        if not result['success']:
+            return {
+                'success': False,
+                'error': f'Error al obtener ramas remotas: {result.get("stderr")}'
+            }
+        
+        # Parsear la salida de ls-remote
+        # Formato: <hash>\trefs/heads/<branch_name>
+        branches = []
+        for line in result['stdout'].strip().split('\n'):
+            if line:
+                parts = line.split('\t')
+                if len(parts) == 2:
+                    ref = parts[1]
+                    if ref.startswith('refs/heads/'):
+                        branch_name = ref.replace('refs/heads/', '')
+                        branches.append(branch_name)
+        
+        return {
+            'success': True,
+            'branches': branches
+        }
