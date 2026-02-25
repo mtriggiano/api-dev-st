@@ -19,8 +19,8 @@ NC='\033[0m' # No Color
 restart_backend() {
     echo -e "${BLUE}🔄 Reiniciando Backend...${NC}"
     
-    # Buscar el PID del proceso master de gunicorn
-    BACKEND_PID=$(ps aux | grep "gunicorn.*api-dev.*wsgi:app" | grep -v grep | awk 'NR==1{print $2}')
+    # Buscar el PID del proceso master de gunicorn (buscar por puerto 5000 y wsgi:app)
+    BACKEND_PID=$(ps aux | grep "gunicorn.*5000.*wsgi:app" | grep -v grep | awk 'NR==1{print $2}')
     
     if [ -z "$BACKEND_PID" ]; then
         echo -e "${RED}❌ Backend no está corriendo${NC}"
@@ -46,7 +46,7 @@ restart_backend() {
     fi
     
     # Verificar que esté corriendo
-    if ps -p "$BACKEND_PID" > /dev/null 2>&1 || pgrep -f "gunicorn.*api-dev" > /dev/null; then
+    if ps -p "$BACKEND_PID" > /dev/null 2>&1 || pgrep -f "gunicorn.*5000.*wsgi:app" > /dev/null; then
         echo -e "${GREEN}✅ Backend está corriendo correctamente${NC}"
         # Mostrar últimas líneas del log
         echo -e "${BLUE}📝 Últimas líneas del log:${NC}"
@@ -104,8 +104,8 @@ show_status() {
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
     # Backend
-    if pgrep -f "gunicorn.*api-dev" > /dev/null; then
-        BACKEND_PID=$(pgrep -f "gunicorn.*api-dev" | head -1)
+    if pgrep -f "gunicorn.*5000.*wsgi:app" > /dev/null; then
+        BACKEND_PID=$(pgrep -f "gunicorn.*5000.*wsgi:app" | head -1)
         echo -e "${GREEN}✅ Backend: Corriendo (PID: $BACKEND_PID)${NC}"
         echo -e "   Puerto: 127.0.0.1:5000"
     else
