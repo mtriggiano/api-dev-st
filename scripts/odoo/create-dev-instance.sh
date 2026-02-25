@@ -163,8 +163,9 @@ BASE_DIR="$DEV_ROOT/$INSTANCE_NAME"
 # Configurar log ANTES de cualquier output importante
 # El nombre del log usa INSTANCE_NAME que ya incluye el prefijo "dev-"
 LOG="/tmp/odoo-create-$INSTANCE_NAME.log"
-exec > >(tee -a "$LOG") 2>&1
+touch "$LOG"
 chmod 666 "$LOG"
+exec > >(tee -a "$LOG") 2>&1
 
 # Verificar si ya existe
 if [[ -d "$BASE_DIR" ]]; then
