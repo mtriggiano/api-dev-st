@@ -6,6 +6,7 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
   const [step, setStep] = useState('input'); // input, verifying, configuring, success, error, git-actions, reconfigure, webhook
   const [githubToken, setGithubToken] = useState('');
   const [repoUrl, setRepoUrl] = useState('');
+  const [customBranch, setCustomBranch] = useState(''); // Rama personalizada para dev
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [githubUser, setGithubUser] = useState(null);
@@ -288,7 +289,10 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
       // Detectar si es producción o desarrollo
       const isProduction = !instanceName.startsWith('dev-');
       const basePath = isProduction ? '/home/mtg/apps/production/odoo' : '/home/mtg/apps/develop/odoo';
-      const branch = isProduction ? 'main' : instanceName;
+      
+      // Para dev: usar rama personalizada si se especificó, sino usar nombre de instancia
+      // Para prod: siempre usar 'main'
+      const branch = isProduction ? 'main' : (customBranch.trim() || instanceName);
       
       const configData = {
         instance_name: instanceName,
@@ -1114,12 +1118,37 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
               />
             </div>
 
+            {/* Campo de rama personalizada solo para instancias dev */}
+            {instanceName.startsWith('dev-') && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Rama de trabajo (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={customBranch}
+                  onChange={(e) => setCustomBranch(e.target.value)}
+                  placeholder={`Dejar vacío para usar: ${instanceName}`}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Especifica una rama existente (ej: develop, feature/nueva-funcionalidad) o déjalo vacío para crear una rama con el nombre de la instancia
+                </p>
+              </div>
+            )}
+
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3">
               <p className="text-sm text-blue-800 dark:text-blue-200 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <span>
                   {instanceName.startsWith('dev-') ? (
-                    <>Se creará automáticamente una rama llamada <strong>{instanceName}</strong> en tu repositorio y se conectará la carpeta custom_addons.</>
+                    <>
+                      {customBranch.trim() ? (
+                        <>Se conectará a la rama <strong>{customBranch.trim()}</strong> de tu repositorio y se sincronizará con la carpeta custom_addons.</>
+                      ) : (
+                        <>Se creará automáticamente una rama llamada <strong>{instanceName}</strong> en tu repositorio y se conectará la carpeta custom_addons.</>
+                      )}
+                    </>
                   ) : (
                     <>Se conectará a la rama <strong>main</strong> de tu repositorio y se sincronizará con la carpeta custom_addons de producción.</>
                   )}
@@ -1196,7 +1225,7 @@ export default function GitHubModal({ isOpen, onClose, instanceName, onSuccess }
               ¡Conectado exitosamente!
             </p>
             <p className="text-gray-600 dark:text-gray-300 text-sm text-center">
-              Tu repositorio está listo para usar con la rama <strong>{instanceName}</strong>
+              Tu repositorio está listo para usar con la rama <strong>{customBranch.trim() || instanceName}</strong>
             </p>
           </div>
         )}
