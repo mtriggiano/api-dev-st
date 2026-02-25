@@ -50,8 +50,8 @@ DELETE FROM ir_config_parameter WHERE key = 'database.enterprise_code';
 DELETE FROM ir_config_parameter WHERE key = 'database.expiration_date';
 DELETE FROM ir_config_parameter WHERE key = 'database.expiration_reason';
 
--- Desactivar modo producción
-UPDATE ir_config_parameter SET value = 'False' WHERE key = 'database.is_neutralized';
+-- Marcar explícitamente la base como neutralizada
+UPDATE ir_config_parameter SET value = 'True' WHERE key = 'database.is_neutralized';
 
 -- Limpiar tokens de OAuth
 DELETE FROM auth_oauth_provider WHERE enabled = true;
