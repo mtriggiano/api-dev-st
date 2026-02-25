@@ -68,6 +68,9 @@ PROD_INSTANCE="$2"
 # Obtener opción de neutralización (tercer argumento opcional: "neutralize" o "no-neutralize")
 NEUTRALIZE_OPTION="${3:-neutralize}"
 
+# Detectar modo auto-confirm (cuarto argumento o variable de entorno)
+AUTO_CONFIRM="${4:-${AUTO_CONFIRM:-false}}"
+
 if [[ -z "$PROD_INSTANCE" ]]; then
     # Si no se pasó como argumento, listar y preguntar
     echo ""
@@ -177,12 +180,17 @@ echo "   Dominio: https://$DOMAIN"
 echo "   Ubicación: $BASE_DIR"
 echo ""
 
-# Leer confirmación
-read CONFIRM
-
-if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
-  echo "❌ Cancelado."
-  exit 1
+# Leer confirmación solo si no está en modo auto-confirm
+if [[ "$AUTO_CONFIRM" != "true" ]] && [[ "$AUTO_CONFIRM" != "yes" ]] && [[ "$AUTO_CONFIRM" != "1" ]]; then
+  echo "¿Continuar? (s/n): "
+  read CONFIRM
+  
+  if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+    echo "❌ Cancelado."
+    exit 1
+  fi
+else
+  echo "✅ Auto-confirmado (modo no interactivo)"
 fi
 
 echo "🚀 Iniciando creación de instancia de desarrollo: $INSTANCE_NAME"

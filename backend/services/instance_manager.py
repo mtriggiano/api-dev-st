@@ -188,10 +188,15 @@ class InstanceManager:
             # Si se especificó una instancia de producción, agregarla como segundo argumento
             if source_instance:
                 script_args.append(source_instance)
+            else:
+                script_args.append('')  # Placeholder para mantener posiciones
             
             # Agregar opción de neutralización como tercer argumento
             neutralize_arg = 'neutralize' if neutralize else 'no-neutralize'
             script_args.append(neutralize_arg)
+            
+            # Agregar auto-confirm como cuarto argumento (modo no interactivo)
+            script_args.append('true')
             
             # El nombre de la instancia completa incluye el prefijo "dev-"
             instance_name = f'dev-{name}'
@@ -201,16 +206,12 @@ class InstanceManager:
             with open(log_file_path, 'w') as log_file:
                 process = subprocess.Popen(
                     script_args,
-                    stdin=subprocess.PIPE,
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
                     start_new_session=True,
                     text=True,
                     bufsize=1
                 )
-                # Enviar confirmación
-                process.stdin.write('s\n')
-                process.stdin.close()
             logger.info(f"Process started for dev instance {instance_name} from source {source_instance or 'default'} (neutralize={neutralize})")
             
             return {
