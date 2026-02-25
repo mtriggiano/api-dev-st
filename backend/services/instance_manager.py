@@ -167,13 +167,14 @@ class InstanceManager:
         
         return instance
     
-    def create_dev_instance(self, name, source_instance=None, neutralize=True):
-        """Crea una nueva instancia de desarrollo
-        
+    def create_dev_instance(self, name: str, source_instance: str = None, neutralize: bool = True, git_branch: str = ''):
+        """
+        Crea una nueva instancia de desarrollo clonando desde producción
         Args:
-            name: Nombre de la instancia de desarrollo
+            name: Nombre de la instancia (sin prefijo dev-)
             source_instance: Instancia de producción a clonar (opcional, usa default del .env si no se especifica)
             neutralize: Si True, neutraliza la base de datos (elimina licencia, desactiva crons/correos)
+            git_branch: Rama Git por defecto para esta instancia (opcional)
         """
         self._init_paths()
         script_path = os.path.join(self.scripts_path, 'odoo/create-dev-instance.sh')
@@ -214,11 +215,25 @@ class InstanceManager:
                 )
             logger.info(f"Process started for dev instance {instance_name} from source {source_instance or 'default'} (neutralize={neutralize})")
             
+            # Guardar rama Git en archivo de configuración si se especificó
+            if git_branch:
+                instance_path = os.path.join(self.dev_root, instance_name)
+                config_file = os.path.join(instance_path, '.git-branch')
+                try:
+                    # Crear directorio si no existe (puede que el script aún no lo haya creado)
+                    os.makedirs(instance_path, exist_ok=True)
+                    with open(config_file, 'w') as f:
+                        f.write(git_branch)
+                    logger.info(f"Saved default Git branch '{git_branch}' for {instance_name}")
+                except Exception as e:
+                    logger.warning(f"Could not save Git branch config: {e}")
+            
             return {
                 'success': True,
                 'message': f'Creación de instancia {instance_name} iniciada. Ver logs: {log_file_path}',
                 'log_file': log_file_path,
-                'instance_name': instance_name  # Devolver el nombre completo de la instancia
+                'instance_name': instance_name,  # Devolver el nombre completo de la instancia
+                'git_branch': git_branch  # Devolver la rama Git configurada
             }
         except Exception as e:
             return {'success': False, 'error': str(e)}

@@ -1,4 +1,4 @@
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, GitBranch } from 'lucide-react';
 
 /**
  * Modal para crear instancias de desarrollo
@@ -13,6 +13,8 @@ export default function CreateDevModal({
   setSelectedSourceInstance,
   neutralizeDatabase,
   setNeutralizeDatabase,
+  gitBranch,
+  setGitBranch,
   productionInstances,
   actionLoading
 }) {
@@ -47,13 +49,36 @@ export default function CreateDevModal({
         </div>
         
         {/* Input de nombre */}
-        <input
-          type="text"
-          value={newInstanceName}
-          onChange={(e) => setNewInstanceName(e.target.value)}
-          placeholder="Nombre (ej: juan, testing, feature-xyz)"
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-        />
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Nombre de la instancia
+          </label>
+          <input
+            type="text"
+            value={newInstanceName}
+            onChange={(e) => setNewInstanceName(e.target.value)}
+            placeholder="Nombre (ej: juan, testing, feature-xyz)"
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+          />
+        </div>
+        
+        {/* Campo de rama Git */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+            <GitBranch className="w-4 h-4" />
+            Rama Git (opcional)
+          </label>
+          <input
+            type="text"
+            value={gitBranch}
+            onChange={(e) => setGitBranch(e.target.value)}
+            placeholder={`Dejar vacío para usar: dev-${newInstanceName || 'nombre'}`}
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+          />
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Si configuras Git después, esta será la rama por defecto (ej: develop, feature/test)
+          </p>
+        </div>
         
         {/* Checkbox de neutralización */}
         <div className="mb-4">

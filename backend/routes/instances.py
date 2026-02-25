@@ -75,8 +75,11 @@ def create_instance():
     # Obtener opción de neutralización (por defecto True)
     neutralize = data.get('neutralize', True)
     
+    # Obtener rama Git (opcional)
+    git_branch = data.get('gitBranch', '').strip()
+    
     try:
-        result = manager.create_dev_instance(data['name'], source_instance, neutralize)
+        result = manager.create_dev_instance(data['name'], source_instance, neutralize, git_branch)
         
         # Log
         source_msg = f" desde {source_instance}" if source_instance else ""

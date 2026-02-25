@@ -69,8 +69,8 @@ export const instances = {
     api.get(`/api/instances/${encodeURIComponent(name)}`),
   
   // Método actualizado: ahora acepta sourceInstance
-  create: (name, sourceInstance = null, neutralize = true) => 
-    api.post('/api/instances/create', { name, sourceInstance, neutralize }),
+  create: (name, sourceInstance = null, neutralize = true, gitBranch = '') => 
+    api.post('/api/instances/create', { name, sourceInstance, neutralize, gitBranch }),
   
   // Nuevo método: obtener instancias de producción disponibles
   getProductionInstances: () => 

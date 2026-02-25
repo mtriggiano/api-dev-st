@@ -35,6 +35,7 @@ export default function Instances() {
   const [availableProductionInstances, setAvailableProductionInstances] = useState([]);
   const [selectedSourceInstance, setSelectedSourceInstance] = useState('');
   const [neutralizeDatabase, setNeutralizeDatabase] = useState(true);
+  const [gitBranch, setGitBranch] = useState('');
   const [selectedInstance, setSelectedInstance] = useState(null);
   const [logs, setLogs] = useState('');
   const [activeLogTab, setActiveLogTab] = useState('systemd');
@@ -157,7 +158,7 @@ export default function Instances() {
 
     setActionLoading({ create: true });
     try {
-      const response = await instances.create(newInstanceName, selectedSourceInstance, neutralizeDatabase);
+      const response = await instances.create(newInstanceName, selectedSourceInstance, neutralizeDatabase, gitBranch);
       setShowCreateModal(false);
       
       // Usar el nombre completo de la instancia que devuelve el backend
@@ -167,6 +168,7 @@ export default function Instances() {
       startCreationPolling(instanceName, false); // false = dev instance
       
       setNewInstanceName('');
+      setGitBranch('');
     } catch (error) {
       setToast({ show: true, message: error.response?.data?.error || 'Error al crear la instancia', type: 'error' });
     } finally {
@@ -434,6 +436,8 @@ export default function Instances() {
         setSelectedSourceInstance={setSelectedSourceInstance}
         neutralizeDatabase={neutralizeDatabase}
         setNeutralizeDatabase={setNeutralizeDatabase}
+        gitBranch={gitBranch}
+        setGitBranch={setGitBranch}
         productionInstances={productionInstances}
         actionLoading={actionLoading}
       />

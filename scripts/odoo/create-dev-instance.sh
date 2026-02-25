@@ -363,10 +363,17 @@ sudo systemctl enable "odoo19e-$INSTANCE_NAME"
 # Regenerar assets antes de iniciar el servicio
 echo "🎨 Regenerando assets (CSS, JS, iconos)..."
 echo "   Esto puede tomar algunos minutos..."
-sudo -u $USER "$VENV_DIR/bin/python3" "$BASE_DIR/odoo-server/odoo-bin" -c "$ODOO_CONF" --update=all --stop-after-init
 
-if [ $? -ne 0 ]; then
-  echo "⚠️  Advertencia: Error al actualizar módulos. Continuando..."
+# Ejecutar con timeout de 5 minutos (300 segundos)
+timeout 300 sudo -u $USER "$VENV_DIR/bin/python3" "$BASE_DIR/odoo-server/odoo-bin" -c "$ODOO_CONF" --update=all --stop-after-init 2>&1 | tee -a "$LOG"
+
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 124 ]; then
+  echo "⚠️  Timeout: La regeneración de assets tardó más de 5 minutos. Continuando..."
+elif [ $EXIT_CODE -ne 0 ]; then
+  echo "⚠️  Advertencia: Error al actualizar módulos (código: $EXIT_CODE). Continuando..."
+else
+  echo "✅ Assets regenerados correctamente"
 fi
 
 echo "🚀 Iniciando servicio Odoo..."
