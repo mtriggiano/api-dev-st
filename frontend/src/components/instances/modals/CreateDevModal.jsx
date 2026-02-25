@@ -1,5 +1,5 @@
 import { AlertCircle, GitBranch, Search } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
 /**
  * Modal para crear instancias de desarrollo
@@ -31,6 +31,20 @@ export default function CreateDevModal({
       (instance.domain && instance.domain.toLowerCase().includes(search))
     );
   }, [productionInstances, searchTerm]);
+  
+  // Auto-seleccionar la primera instancia filtrada cuando cambia el filtro
+  useEffect(() => {
+    if (filteredInstances.length > 0) {
+      // Si la instancia seleccionada no está en los resultados filtrados, seleccionar la primera
+      const isSelectedInFiltered = filteredInstances.some(
+        instance => instance.name === selectedSourceInstance
+      );
+      
+      if (!isSelectedInFiltered) {
+        setSelectedSourceInstance(filteredInstances[0].name);
+      }
+    }
+  }, [filteredInstances, selectedSourceInstance, setSelectedSourceInstance]);
   
   if (!show) return null;
 
