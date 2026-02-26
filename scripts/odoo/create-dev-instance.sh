@@ -581,21 +581,6 @@ if [[ -d "$PROD_FILESTORE" ]]; then
   echo "✅ Filestore sincronizado ($(find $DEV_FILESTORE -type f | wc -l) archivos)"
 fi
 
-# Preguntar si neutralizar
-echo ""
-echo "🔒 ¿Neutralizar base de datos? (s/n):"
-read NEUTRALIZE
-
-if [[ "$NEUTRALIZE" == "s" ]] || [[ "$NEUTRALIZE" == "S" ]]; then
-  echo "🔒 Neutralizando base de datos..."
-  NEUTRALIZE_SCRIPT="/home/mtg/api-dev/scripts/odoo/neutralize-database-sql.sh"
-  if [[ -f "$NEUTRALIZE_SCRIPT" ]]; then
-    "$NEUTRALIZE_SCRIPT" "$DEV_DB"
-  else
-    echo "⚠️  Script de neutralización no encontrado en: $NEUTRALIZE_SCRIPT"
-  fi
-fi
-
 echo "🎨 Regenerando assets..."
 cd "__BASE_DIR__"
 source venv/bin/activate
