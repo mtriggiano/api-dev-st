@@ -3,15 +3,41 @@ import { logs } from '../lib/api';
 import { FileText, Filter, Download } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 
+const LOGS_FILTERS_STORAGE_KEY = 'api-dev.logs.filters';
+
 export default function Logs() {
   const [logList, setLogList] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({
-    instance: '',
-    action: '',
-    hours: 24
+  const [filters, setFilters] = useState(() => {
+    try {
+      const stored = localStorage.getItem(LOGS_FILTERS_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return {
+          instance: parsed.instance || '',
+          action: parsed.action || '',
+          hours: Number(parsed.hours) || 24,
+        };
+      }
+    } catch {
+      // Ignorar errores de acceso a localStorage
+    }
+
+    return {
+      instance: '',
+      action: '',
+      hours: 24,
+    };
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOGS_FILTERS_STORAGE_KEY, JSON.stringify(filters));
+    } catch {
+      // Ignorar errores de acceso a localStorage
+    }
+  }, [filters]);
 
   useEffect(() => {
     fetchLogs();

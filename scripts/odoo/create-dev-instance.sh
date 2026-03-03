@@ -376,6 +376,19 @@ else
   echo "✅ Assets regenerados correctamente"
 fi
 
+# Reaplicar neutralización después del update de módulos,
+# ya que algunos módulos pueden reactivar crons/parámetros durante --update=all.
+if [[ "$NEUTRALIZE_OPTION" == "neutralize" ]]; then
+  echo "🛡️  Reaplicando neutralización post-update..."
+  "$SCRIPTS_PATH/odoo/neutralize-database-sql.sh" "$DB_NAME"
+  if [ $? -eq 0 ]; then
+    echo "✅ Neutralización post-update aplicada correctamente"
+  else
+    echo "❌ Error al reaplicar neutralización post-update"
+    exit 1
+  fi
+fi
+
 echo "🚀 Iniciando servicio Odoo..."
 sudo systemctl start "odoo19e-$INSTANCE_NAME"
 sleep 3
@@ -392,6 +405,7 @@ fi
 [[ -L "/etc/nginx/sites-enabled/$INSTANCE_NAME" ]] && sudo rm -f "/etc/nginx/sites-enabled/$INSTANCE_NAME"
 
 echo "🔍 Verificando si ya existe certificado SSL para $DOMAIN..."
+INSTANCE_URL="http://$DOMAIN"
 if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
     echo "🚫 Certificado no encontrado. Creando configuración HTTP temporal..."
     
@@ -443,9 +457,14 @@ EOF
     sudo nginx -t && sudo systemctl reload nginx || sudo systemctl start nginx
     
     echo "📜 Obteniendo certificado SSL con Certbot..."
-    sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@softrigx.com --redirect
-    
-    echo "✅ Certificado SSL obtenido y configurado automáticamente por Certbot"
+    if sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@softrigx.com --redirect; then
+        echo "✅ Certificado SSL obtenido y configurado automáticamente por Certbot"
+        INSTANCE_URL="https://$DOMAIN"
+    else
+        echo "⚠️  No se pudo obtener certificado SSL ahora mismo (Certbot ocupado o error temporal)."
+        echo "   La instancia queda operativa en HTTP: http://$DOMAIN"
+        echo "   Puedes reintentar luego con: sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@softrigx.com --redirect"
+    fi
 else
     echo "✅ Certificado SSL ya existe. Creando configuración con HTTPS..."
     
@@ -512,6 +531,7 @@ server {
     
     echo "🔄 Recargando Nginx con configuración HTTPS..."
     sudo nginx -t && sudo systemctl reload nginx
+    INSTANCE_URL="https://$DOMAIN"
 fi
 
 echo "✅ Nginx configurado correctamente para $DOMAIN"
@@ -828,7 +848,7 @@ chmod +x "$BASE_DIR/regenerate-assets.sh"
 # Generar archivo de información
 cat > "$INFO_FILE" <<EOF
 🔧 Instancia de Desarrollo: $INSTANCE_NAME
-🌍 Dominio: https://$DOMAIN
+🌍 Dominio: $INSTANCE_URL
 🛠️ Puerto: $PORT
 🗄️ Base de datos: $DB_NAME
 👤 Usuario DB: $DB_USER
@@ -870,7 +890,7 @@ if [[ -n "$5" ]]; then
 fi
 
 echo ""
-echo "✅ Instancia de desarrollo creada con éxito: https://$DOMAIN"
+echo "✅ Instancia de desarrollo creada con éxito: $INSTANCE_URL"
 echo "📂 Ver detalles en: $BASE_DIR/info-instancia.txt"
 echo ""
 echo "📜 Scripts disponibles:"

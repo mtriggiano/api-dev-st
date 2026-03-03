@@ -1,6 +1,8 @@
 import { AlertCircle, GitBranch, Search } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 
+const CREATE_DEV_MODAL_SEARCH_STORAGE_KEY = 'api-dev.instances.create-dev.searchTerm';
+
 /**
  * Modal para crear instancias de desarrollo
  */
@@ -19,7 +21,25 @@ export default function CreateDevModal({
   productionInstances,
   actionLoading
 }) {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => {
+    try {
+      return localStorage.getItem(CREATE_DEV_MODAL_SEARCH_STORAGE_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (searchTerm) {
+        localStorage.setItem(CREATE_DEV_MODAL_SEARCH_STORAGE_KEY, searchTerm);
+      } else {
+        localStorage.removeItem(CREATE_DEV_MODAL_SEARCH_STORAGE_KEY);
+      }
+    } catch {
+      // Ignorar errores de acceso a localStorage
+    }
+  }, [searchTerm]);
   
   // Filtrar instancias de producción según búsqueda
   const filteredInstances = useMemo(() => {

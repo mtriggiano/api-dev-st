@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from services.instance_manager import InstanceManager
 from models import db, ActionLog, User
+from services.access_control import can_user_access_instance, filter_instances_for_user, grant_user_instance_access
 
 instances_bp = Blueprint('instances', __name__)
 manager = InstanceManager()
@@ -27,7 +28,13 @@ def log_action(user_id, action, instance_name=None, details=None, status='succes
 def list_instances():
     """Lista todas las instancias"""
     try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+
         instances = manager.list_instances()
+        instances = filter_instances_for_user(user, instances)
         return jsonify({'instances': instances, 'count': len(instances)}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -37,6 +44,14 @@ def list_instances():
 def get_instance(instance_name):
     """Obtiene información detallada de una instancia"""
     try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+
+        if not can_user_access_instance(user, instance_name):
+            return jsonify({'error': 'No tienes acceso a esta instancia'}), 403
+
         instance = manager.get_instance_status(instance_name)
         if not instance:
             return jsonify({'error': 'Instancia no encontrada'}), 404
@@ -49,7 +64,13 @@ def get_instance(instance_name):
 def get_production_instances():
     """Lista las instancias de producción disponibles para clonar"""
     try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+
         instances = manager.list_production_instances()
+        instances = filter_instances_for_user(user, instances)
         return jsonify({'instances': instances}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -60,17 +81,22 @@ def create_instance():
     """Crea una nueva instancia de desarrollo"""
     user_id = int(get_jwt_identity())
     user = User.query.get(user_id)
+
+    if not user:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
     
     # Verificar permisos
     if user.role not in ['admin', 'developer']:
         return jsonify({'error': 'Permisos insuficientes'}), 403
-    
+
     data = request.get_json()
     if not data or not data.get('name'):
         return jsonify({'error': 'Nombre de instancia requerido'}), 400
     
     # Obtener instancia de producción a clonar (opcional)
     source_instance = data.get('sourceInstance')
+    if source_instance and not can_user_access_instance(user, source_instance):
+        return jsonify({'error': 'No tienes acceso a la instancia de origen seleccionada'}), 403
     
     # Obtener opción de neutralización (por defecto True)
     neutralize = data.get('neutralize', True)
@@ -93,6 +119,9 @@ def create_instance():
         )
         
         if result['success']:
+            created_instance_name = result.get('instance_name') or f"dev-{data['name']}"
+            grant_user_instance_access(user, created_instance_name)
+            db.session.commit()
             return jsonify(result), 202  # Accepted
         else:
             return jsonify(result), 500
@@ -256,6 +285,9 @@ def update_instance_db(instance_name):
     # Verificar permisos
     if user.role not in ['admin', 'developer']:
         return jsonify({'error': 'Permisos insuficientes'}), 403
+
+    if not can_user_access_instance(user, instance_name):
+        return jsonify({'error': 'No tienes acceso a esta instancia'}), 403
     
     try:
         # Obtener parámetro de neutralización (por defecto True)
@@ -291,6 +323,9 @@ def update_instance_files(instance_name):
     # Verificar permisos
     if user.role not in ['admin', 'developer']:
         return jsonify({'error': 'Permisos insuficientes'}), 403
+
+    if not can_user_access_instance(user, instance_name):
+        return jsonify({'error': 'No tienes acceso a esta instancia'}), 403
     
     try:
         result = manager.update_instance_files(instance_name)
@@ -319,6 +354,14 @@ def get_instance_logs(instance_name):
     lines = request.args.get('lines', default=100, type=int)
     lines = min(lines, 1000)  # Máximo 1000 líneas
     log_type = request.args.get('type', default='systemd', type=str)
+
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+
+    if not can_user_access_instance(user, instance_name):
+        return jsonify({'error': 'No tienes acceso a esta instancia'}), 403
     
     try:
         result = manager.get_instance_logs(instance_name, lines, log_type)
@@ -339,6 +382,9 @@ def restart_instance(instance_name):
     # Verificar permisos
     if user.role not in ['admin', 'developer']:
         return jsonify({'error': 'Permisos insuficientes'}), 403
+
+    if not can_user_access_instance(user, instance_name):
+        return jsonify({'error': 'No tienes acceso a esta instancia'}), 403
     
     try:
         result = manager.restart_instance(instance_name)
@@ -365,6 +411,14 @@ def restart_instance(instance_name):
 def get_creation_log(instance_name):
     """Obtiene log incremental + estado + pid de creación"""
     import os
+
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+
+    if not can_user_access_instance(user, instance_name):
+        return jsonify({'error': 'No tienes acceso a esta instancia'}), 403
 
     # Paths
     log_file = f'/tmp/odoo-create-{instance_name}.log'
@@ -428,6 +482,14 @@ def get_creation_log(instance_name):
 def get_update_log(instance_name, action):
     """Obtiene el log de actualización de una instancia"""
     import os
+
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+
+    if not can_user_access_instance(user, instance_name):
+        return jsonify({'error': 'No tienes acceso a esta instancia'}), 403
     
     log_files = {
         'update-db': f'/tmp/odoo-update-db-{instance_name}.log',
@@ -460,6 +522,9 @@ def sync_instance_filestore(instance_name):
     # Verificar permisos
     if user.role not in ['admin', 'developer']:
         return jsonify({'error': 'Permisos insuficientes'}), 403
+
+    if not can_user_access_instance(user, instance_name):
+        return jsonify({'error': 'No tienes acceso a esta instancia'}), 403
     
     try:
         result = manager.sync_filestore(instance_name)
@@ -491,6 +556,9 @@ def regenerate_instance_assets(instance_name):
     # Verificar permisos
     if user.role not in ['admin', 'developer']:
         return jsonify({'error': 'Permisos insuficientes'}), 403
+
+    if not can_user_access_instance(user, instance_name):
+        return jsonify({'error': 'No tienes acceso a esta instancia'}), 403
     
     try:
         result = manager.regenerate_assets(instance_name)

@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import User
 from config import Config
+from services.access_control import can_user_access_instance
 import os
 import re
 from collections import deque
@@ -141,6 +142,9 @@ def get_available_logs(instance_name):
     
     if not user or user.role not in ['admin', 'developer', 'viewer']:
         return jsonify({'error': 'Permisos insuficientes'}), 403
+
+    if not can_user_access_instance(user, instance_name):
+        return jsonify({'error': 'No tienes acceso a esta instancia'}), 403
     
     base_path = _get_instance_log_path(instance_name)
     if not base_path:
@@ -187,6 +191,9 @@ def view_log(instance_name):
     
     if not user or user.role not in ['admin', 'developer', 'viewer']:
         return jsonify({'error': 'Permisos insuficientes'}), 403
+
+    if not can_user_access_instance(user, instance_name):
+        return jsonify({'error': 'No tienes acceso a esta instancia'}), 403
     
     base_path = _get_instance_log_path(instance_name)
     if not base_path:

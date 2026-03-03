@@ -4,11 +4,22 @@ import Dashboard from './components/Dashboard';
 import Instances from './components/Instances';
 import Logs from './components/Logs';
 import BackupsV2 from './components/BackupsV2';
+import Users from './components/Users';
 import Layout from './components/Layout';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('access_token');
   return token ? children : <Navigate to="/login" />;
+}
+
+function AdminRoute({ children }) {
+  const token = localStorage.getItem('access_token');
+  if (!token) {
+    return <Navigate to="/login" />;
+  }
+
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  return user?.role === 'admin' ? children : <Navigate to="/" />;
 }
 
 function App() {
@@ -60,6 +71,16 @@ function App() {
                 <BackupsV2 />
               </Layout>
             </PrivateRoute>
+          }
+        />
+        <Route
+          path="/users"
+          element={
+            <AdminRoute>
+              <Layout>
+                <Users />
+              </Layout>
+            </AdminRoute>
           }
         />
       </Routes>

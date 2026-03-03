@@ -32,6 +32,7 @@ def create_app():
     from routes.test_upload import test_upload_bp
     from routes.chunked_upload import chunked_upload_bp
     from routes.odoo_logs import odoo_logs_bp
+    from routes.users import users_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(metrics_bp, url_prefix='/api/metrics')
@@ -43,6 +44,7 @@ def create_app():
     app.register_blueprint(test_upload_bp, url_prefix='/api')
     app.register_blueprint(chunked_upload_bp, url_prefix='/api')
     app.register_blueprint(odoo_logs_bp, url_prefix='/api/odoo-logs')
+    app.register_blueprint(users_bp, url_prefix='/api/users')
     
     # Manejadores de errores JWT
     @jwt.expired_token_loader

@@ -13,20 +13,58 @@ class User(db.Model):
     role = db.Column(db.String(20), nullable=False, default='viewer')  # admin, developer, viewer
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
+
+    profile = db.relationship('UserProfile', backref='user', uselist=False, cascade='all, delete-orphan')
+    instance_accesses = db.relationship('UserInstanceAccess', backref='user', cascade='all, delete-orphan')
     
     def set_password(self, password):
         self.password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     
     def check_password(self, password):
         return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
+
+    def assigned_instances(self):
+        return sorted({access.instance_name for access in self.instance_accesses})
     
     def to_dict(self):
         return {
             'id': self.id,
             'username': self.username,
             'role': self.role,
+            'first_name': self.profile.first_name if self.profile else '',
+            'last_name': self.profile.last_name if self.profile else '',
+            'assigned_instances': self.assigned_instances(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'last_login': self.last_login.isoformat() if self.last_login else None
+        }
+
+
+class UserProfile(db.Model):
+    __tablename__ = 'user_profiles'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
+    first_name = db.Column(db.String(120), nullable=False, default='')
+    last_name = db.Column(db.String(120), nullable=False, default='')
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UserInstanceAccess(db.Model):
+    __tablename__ = 'user_instance_access'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    instance_name = db.Column(db.String(120), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (db.UniqueConstraint('user_id', 'instance_name', name='_user_instance_access_uc'),)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'instance_name': self.instance_name,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
 class ActionLog(db.Model):

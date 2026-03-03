@@ -28,10 +28,18 @@ localApi.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+const BACKUPS_V2_FILTER_STORAGE_KEY = 'api-dev.backups-v2.filterTerm';
+
 export default function BackupsV2() {
   const [instances, setInstances] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterTerm, setFilterTerm] = useState('');
+  const [filterTerm, setFilterTerm] = useState(() => {
+    try {
+      return localStorage.getItem(BACKUPS_V2_FILTER_STORAGE_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [configModal, setConfigModal] = useState({ show: false, instance: null, config: null });
   const [backupListModal, setBackupListModal] = useState({ show: false, instance: null, backups: [] });
@@ -39,6 +47,18 @@ export default function BackupsV2() {
   const [backupProgress, setBackupProgress] = useState({});
   const [restoreProgress, setRestoreProgress] = useState({});
   const [showUploadModal, setShowUploadModal] = useState({ show: false, instance: null });
+
+  useEffect(() => {
+    try {
+      if (filterTerm) {
+        localStorage.setItem(BACKUPS_V2_FILTER_STORAGE_KEY, filterTerm);
+      } else {
+        localStorage.removeItem(BACKUPS_V2_FILTER_STORAGE_KEY);
+      }
+    } catch {
+      // Ignorar errores de acceso a localStorage
+    }
+  }, [filterTerm]);
 
   useEffect(() => {
     fetchInstances();

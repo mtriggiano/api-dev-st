@@ -166,6 +166,306 @@ class InstanceManager:
                 instance['service_details'] = f"Error: {str(e)}"
         
         return instance
+
+    def _extract_conf_value(self, conf_content: str, key: str):
+        pattern = rf'^\s*{re.escape(key)}\s*=\s*(.+?)\s*$'
+        match = re.search(pattern, conf_content, re.MULTILINE)
+        return match.group(1).strip() if match else None
+
+    def _infer_dev_context(self, instance_name: str, instance_path: str):
+        conf_path = os.path.join(instance_path, 'odoo.conf')
+        if not os.path.exists(conf_path):
+            return None
+
+        try:
+            with open(conf_path, 'r', encoding='utf-8') as f:
+                conf_content = f.read()
+        except Exception:
+            return None
+
+        dev_db = self._extract_conf_value(conf_content, 'db_name')
+        if not dev_db:
+            return None
+
+        prefix = f'{instance_name}-'
+        if dev_db.startswith(prefix):
+            prod_db = dev_db[len(prefix):]
+        else:
+            match = re.search(r'(prod-[A-Za-z0-9_-]+)$', dev_db)
+            prod_db = match.group(1) if match else None
+
+        if not prod_db:
+            return None
+
+        return {
+            'instance_name': instance_name,
+            'instance_path': instance_path,
+            'prod_db': prod_db,
+            'dev_db': dev_db,
+            'prod_dir': os.path.join(self.prod_root, prod_db),
+            'scripts_path': self.scripts_path,
+        }
+
+    def _ensure_dev_action_scripts(self, instance_name: str, instance_path: str):
+        """Regenera scripts auxiliares si faltan en una instancia dev."""
+        self._init_paths()
+        context = self._infer_dev_context(instance_name, instance_path)
+        if not context:
+            return False, 'No se pudo inferir contexto de la instancia desde odoo.conf'
+
+        update_db_template = """#!/bin/bash
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Script para actualizar la BD de desarrollo desde producción
+
+PROD_DB="__PROD_DB__"
+DEV_DB="__DEV_DB__"
+INSTANCE_NAME="__INSTANCE_NAME__"
+
+echo "🔄 Actualizando base de datos de desarrollo desde producción..."
+echo "   Producción: $PROD_DB"
+echo "   Desarrollo: $DEV_DB"
+
+if [ -t 0 ]; then
+  read -p "Confirmar actualización (s/n): " CONFIRM
+else
+  read CONFIRM
+fi
+if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+  echo "❌ Cancelado."
+  exit 1
+fi
+
+echo "⏹️  Deteniendo servicio Odoo..."
+sudo systemctl stop "odoo19e-$INSTANCE_NAME"
+
+echo "🗄️  Eliminando BD de desarrollo actual..."
+sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DEV_DB';" >/dev/null 2>&1
+sudo -u postgres dropdb "$DEV_DB" 2>/dev/null
+
+echo "📦 Creando dump de producción..."
+sudo -u postgres pg_dump "$PROD_DB" > "/tmp/${DEV_DB}_dump.sql"
+
+echo "🔄 Restaurando en desarrollo..."
+sudo -u postgres createdb "$DEV_DB" -O "mtg" --encoding='UTF8'
+sudo -u postgres psql -d "$DEV_DB" < "/tmp/${DEV_DB}_dump.sql"
+rm -f "/tmp/${DEV_DB}_dump.sql"
+
+echo "🔐 Configurando permisos..."
+sudo -u postgres psql -d "$DEV_DB" -c "GRANT ALL ON SCHEMA public TO mtg;" > /dev/null
+sudo -u postgres psql -d "$DEV_DB" -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO mtg;" > /dev/null
+sudo -u postgres psql -d "$DEV_DB" -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO mtg;" > /dev/null
+sudo -u postgres psql -d "$DEV_DB" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO mtg;" > /dev/null
+
+echo "📁 Sincronizando filestore..."
+FILESTORE_BASE="/home/mtg/.local/share/Odoo/filestore"
+PROD_FILESTORE="$FILESTORE_BASE/$PROD_DB"
+DEV_FILESTORE="$FILESTORE_BASE/$DEV_DB"
+if [[ -d "$PROD_FILESTORE" ]]; then
+  mkdir -p "$DEV_FILESTORE"
+  rsync -a --delete "$PROD_FILESTORE/" "$DEV_FILESTORE/"
+  echo "✅ Filestore sincronizado ($(find $DEV_FILESTORE -type f | wc -l) archivos)"
+fi
+
+echo "🎨 Regenerando assets..."
+cd "__BASE_DIR__"
+source venv/bin/activate
+./venv/bin/python3 ./odoo-server/odoo-bin -c ./odoo.conf --update=all --stop-after-init
+
+echo "🛡️  Aplicando neutralización post-update..."
+"__SCRIPTS_PATH__/odoo/neutralize-database-sql.sh" "$DEV_DB"
+
+echo "▶️  Iniciando servicio Odoo..."
+sudo systemctl start "odoo19e-$INSTANCE_NAME"
+
+echo "✅ Base de datos actualizada correctamente."
+"""
+
+        update_files_template = """#!/bin/bash
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Script para actualizar archivos de desarrollo desde producción
+
+PROD_DIR="__PROD_DIR__"
+DEV_DIR="__BASE_DIR__"
+INSTANCE_NAME="__INSTANCE_NAME__"
+
+echo "🔄 Actualizando archivos desde producción..."
+echo "   Producción: $PROD_DIR"
+echo "   Desarrollo: $DEV_DIR"
+
+if [ -t 0 ]; then
+  read -p "Confirmar actualización (s/n): " CONFIRM
+else
+  read CONFIRM
+fi
+if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+  echo "❌ Cancelado."
+  exit 1
+fi
+
+echo "⏹️  Deteniendo servicio Odoo..."
+sudo systemctl stop "odoo19e-$INSTANCE_NAME"
+
+echo "💾 Haciendo backup de custom_addons..."
+if [[ -d "$DEV_DIR/custom_addons" ]]; then
+  cp -r "$DEV_DIR/custom_addons" "$DEV_DIR/custom_addons.backup"
+fi
+
+echo "🗑️  Eliminando odoo-server actual..."
+rm -rf "$DEV_DIR/odoo-server"
+
+echo "📦 Copiando archivos desde producción..."
+mkdir -p "$DEV_DIR/odoo-server"
+cp -r "$PROD_DIR/odoo-server/"* "$DEV_DIR/odoo-server/"
+
+echo "🔄 Restaurando custom_addons..."
+if [[ -d "$DEV_DIR/custom_addons.backup" ]]; then
+  rm -rf "$DEV_DIR/custom_addons"
+  mv "$DEV_DIR/custom_addons.backup" "$DEV_DIR/custom_addons"
+fi
+
+echo "🐍 Actualizando dependencias Python..."
+source "$DEV_DIR/venv/bin/activate"
+pip install --upgrade pip wheel
+pip install -r "$DEV_DIR/odoo-server/requirements.txt"
+pip install phonenumbers gevent greenlet
+
+echo "▶️  Iniciando servicio Odoo..."
+sudo systemctl start "odoo19e-$INSTANCE_NAME"
+
+echo "✅ Archivos actualizados correctamente."
+"""
+
+        sync_filestore_template = """#!/bin/bash
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Script para sincronizar filestore desde producción
+
+PROD_DB="__PROD_DB__"
+DEV_DB="__DEV_DB__"
+INSTANCE_NAME="__INSTANCE_NAME__"
+
+echo "📁 Sincronizando filestore desde producción..."
+echo "   Producción: $PROD_DB"
+echo "   Desarrollo: $DEV_DB"
+
+if [ -t 0 ]; then
+  read -p "Confirmar sincronización (s/n): " CONFIRM
+else
+  read CONFIRM
+fi
+if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+  echo "❌ Cancelado."
+  exit 1
+fi
+
+echo "⏹️  Deteniendo servicio Odoo..."
+sudo systemctl stop "odoo19e-$INSTANCE_NAME"
+
+echo "📁 Sincronizando filestore..."
+FILESTORE_BASE="/home/mtg/.local/share/Odoo/filestore"
+PROD_FILESTORE="$FILESTORE_BASE/$PROD_DB"
+DEV_FILESTORE="$FILESTORE_BASE/$DEV_DB"
+
+if [[ -d "$PROD_FILESTORE" ]]; then
+  mkdir -p "$DEV_FILESTORE"
+  rsync -a --delete "$PROD_FILESTORE/" "$DEV_FILESTORE/"
+  FILE_COUNT=$(find "$DEV_FILESTORE" -type f | wc -l)
+  echo "✅ Filestore sincronizado ($FILE_COUNT archivos)"
+else
+  echo "⚠️  No se encontró filestore de producción en $PROD_FILESTORE"
+fi
+
+echo "▶️  Iniciando servicio Odoo..."
+sudo systemctl start "odoo19e-$INSTANCE_NAME"
+
+echo "✅ Filestore sincronizado correctamente."
+"""
+
+        regenerate_assets_template = """#!/bin/bash
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Script para regenerar assets de Odoo
+
+INSTANCE_NAME="__INSTANCE_NAME__"
+BASE_DIR="__BASE_DIR__"
+
+echo "🎨 Regenerando assets de Odoo..."
+echo "   Instancia: $INSTANCE_NAME"
+
+if [ -t 0 ]; then
+  read -p "Confirmar regeneración (s/n): " CONFIRM
+else
+  read CONFIRM
+fi
+if [[ "$CONFIRM" != "s" ]] && [[ "$CONFIRM" != "S" ]]; then
+  echo "❌ Cancelado."
+  exit 1
+fi
+
+echo "⏹️  Deteniendo servicio Odoo..."
+sudo systemctl stop "odoo19e-$INSTANCE_NAME"
+sleep 5
+
+echo "🎨 Regenerando assets..."
+cd "$BASE_DIR"
+source venv/bin/activate
+
+TEMP_LOG="/tmp/odoo-regenerate-$INSTANCE_NAME.log"
+./venv/bin/python3 ./odoo-server/odoo-bin -c ./odoo.conf --update=all --stop-after-init > "$TEMP_LOG" 2>&1 &
+ODOO_PID=$!
+
+echo "   Procesando (esto puede tardar 1-2 minutos)..."
+while kill -0 $ODOO_PID 2>/dev/null; do
+  sleep 2
+  echo -n "."
+done
+echo ""
+
+wait $ODOO_PID
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 0 ]; then
+  echo "✅ Regeneración completada exitosamente"
+else
+  echo "⚠️  Proceso terminó con código: $EXIT_CODE"
+  echo "   Ver log completo en: $TEMP_LOG"
+fi
+
+echo "▶️  Iniciando servicio Odoo..."
+sudo systemctl start "odoo19e-$INSTANCE_NAME"
+
+echo "✅ Assets regenerados correctamente"
+"""
+
+        replacements = {
+            '__PROD_DB__': context['prod_db'],
+            '__DEV_DB__': context['dev_db'],
+            '__INSTANCE_NAME__': context['instance_name'],
+            '__BASE_DIR__': context['instance_path'],
+            '__PROD_DIR__': context['prod_dir'],
+            '__SCRIPTS_PATH__': context['scripts_path'],
+        }
+
+        scripts = {
+            'update-db.sh': update_db_template,
+            'update-files.sh': update_files_template,
+            'sync-filestore.sh': sync_filestore_template,
+            'regenerate-assets.sh': regenerate_assets_template,
+        }
+
+        created_scripts = []
+        for script_name, template in scripts.items():
+            script_path = os.path.join(instance_path, script_name)
+            if os.path.exists(script_path):
+                continue
+
+            script_content = template
+            for source, target in replacements.items():
+                script_content = script_content.replace(source, target)
+
+            with open(script_path, 'w', encoding='utf-8') as f:
+                f.write(script_content)
+            os.chmod(script_path, 0o755)
+            created_scripts.append(script_name)
+
+        return True, created_scripts
     
     def create_dev_instance(self, name: str, source_instance: str = None, neutralize: bool = True, git_branch: str = ''):
         """
@@ -409,7 +709,10 @@ class InstanceManager:
         script_path = os.path.join(instance_path, 'update-db.sh')
         
         if not os.path.exists(script_path):
-            return {'success': False, 'error': 'Script update-db.sh no encontrado'}
+            ok, details = self._ensure_dev_action_scripts(instance_name, instance_path)
+            if not ok or not os.path.exists(script_path):
+                return {'success': False, 'error': f'Script update-db.sh no encontrado. {details}'}
+            logger.info(f'Scripts regenerados para {instance_name}: {details}')
         
         try:
             # Responder automáticamente: s para continuar, s/n para neutralizar
@@ -445,7 +748,10 @@ class InstanceManager:
         script_path = os.path.join(instance_path, 'update-files.sh')
         
         if not os.path.exists(script_path):
-            return {'success': False, 'error': 'Script update-files.sh no encontrado'}
+            ok, details = self._ensure_dev_action_scripts(instance_name, instance_path)
+            if not ok or not os.path.exists(script_path):
+                return {'success': False, 'error': f'Script update-files.sh no encontrado. {details}'}
+            logger.info(f'Scripts regenerados para {instance_name}: {details}')
         
         try:
             # Ejecutar script en background con log
@@ -606,7 +912,10 @@ class InstanceManager:
         script_path = os.path.join(instance_path, 'sync-filestore.sh')
         
         if not os.path.exists(script_path):
-            return {'success': False, 'error': 'Script sync-filestore.sh no encontrado'}
+            ok, details = self._ensure_dev_action_scripts(instance_name, instance_path)
+            if not ok or not os.path.exists(script_path):
+                return {'success': False, 'error': f'Script sync-filestore.sh no encontrado. {details}'}
+            logger.info(f'Scripts regenerados para {instance_name}: {details}')
         
         try:
             # Ejecutar script en background con log
@@ -639,7 +948,10 @@ class InstanceManager:
         script_path = os.path.join(instance_path, 'regenerate-assets.sh')
         
         if not os.path.exists(script_path):
-            return {'success': False, 'error': 'Script regenerate-assets.sh no encontrado'}
+            ok, details = self._ensure_dev_action_scripts(instance_name, instance_path)
+            if not ok or not os.path.exists(script_path):
+                return {'success': False, 'error': f'Script regenerate-assets.sh no encontrado. {details}'}
+            logger.info(f'Scripts regenerados para {instance_name}: {details}')
         
         try:
             # Ejecutar script en background con log

@@ -15,6 +15,9 @@ import { InstanceCard } from './instances/cards';
 // Utilidades
 import { getConfirmTitle, getConfirmMessage, applyAllFilters } from './instances/utils';
 
+const INSTANCE_SEARCH_STORAGE_KEY = 'api-dev.instances.searchTerm';
+const INSTANCE_PRODUCTION_FILTER_STORAGE_KEY = 'api-dev.instances.filterByProduction';
+
 export default function Instances() {
   // Hook para manejar lista de instancias (reemplaza useState y useEffect)
   const { instanceList, loading, fetchInstances } = useInstances();
@@ -46,8 +49,44 @@ export default function Instances() {
   const [githubModal, setGithubModal] = useState({ show: false, instanceName: '' });
   const [logViewerInstance, setLogViewerInstance] = useState(null);
   const [deleteProductionModal, setDeleteProductionModal] = useState({ show: false, instanceName: '', confirmation: '', step: 1 });
-  const [filterByProduction, setFilterByProduction] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [filterByProduction, setFilterByProduction] = useState(() => {
+    try {
+      return localStorage.getItem(INSTANCE_PRODUCTION_FILTER_STORAGE_KEY) || 'all';
+    } catch {
+      return 'all';
+    }
+  });
+  const [searchTerm, setSearchTerm] = useState(() => {
+    try {
+      return localStorage.getItem(INSTANCE_SEARCH_STORAGE_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (searchTerm) {
+        localStorage.setItem(INSTANCE_SEARCH_STORAGE_KEY, searchTerm);
+      } else {
+        localStorage.removeItem(INSTANCE_SEARCH_STORAGE_KEY);
+      }
+    } catch {
+      // Ignorar errores de acceso a localStorage
+    }
+  }, [searchTerm]);
+
+  useEffect(() => {
+    try {
+      if (filterByProduction && filterByProduction !== 'all') {
+        localStorage.setItem(INSTANCE_PRODUCTION_FILTER_STORAGE_KEY, filterByProduction);
+      } else {
+        localStorage.removeItem(INSTANCE_PRODUCTION_FILTER_STORAGE_KEY);
+      }
+    } catch {
+      // Ignorar errores de acceso a localStorage
+    }
+  }, [filterByProduction]);
   
   // Los hooks ya manejan: fetchInstances, creationLog, updateLog, refs y auto-scroll
 

@@ -22,6 +22,10 @@ const LEVEL_ICONS = {
   CRITICAL: AlertCircle,
 };
 
+const LOG_VIEWER_STORAGE_KEY_PREFIX = 'api-dev.log-viewer';
+
+const getLogViewerStorageKey = (instanceName) => `${LOG_VIEWER_STORAGE_KEY_PREFIX}.${instanceName || 'global'}`;
+
 export default function LogViewer({ instanceName, onClose }) {
   const [logs, setLogs] = useState([]);
   const [availableLogs, setAvailableLogs] = useState([]);
@@ -39,6 +43,48 @@ export default function LogViewer({ instanceName, onClose }) {
   
   const logContainerRef = useRef(null);
   const autoRefreshRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(getLogViewerStorageKey(instanceName));
+      if (!stored) return;
+
+      const parsed = JSON.parse(stored);
+      if (typeof parsed.selectedLogType === 'string' && parsed.selectedLogType) {
+        setSelectedLogType(parsed.selectedLogType);
+      }
+      setLevelFilter(parsed.levelFilter || '');
+
+      const savedSearchQuery = parsed.searchQuery || '';
+      const savedSearchInput = parsed.searchInput ?? savedSearchQuery;
+      setSearchQuery(savedSearchQuery);
+      setSearchInput(savedSearchInput);
+
+      const savedLinesCount = Number(parsed.linesCount);
+      if ([100, 500, 1000, 2000, 5000].includes(savedLinesCount)) {
+        setLinesCount(savedLinesCount);
+      }
+    } catch {
+      // Ignorar errores de acceso a localStorage
+    }
+  }, [instanceName]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        getLogViewerStorageKey(instanceName),
+        JSON.stringify({
+          selectedLogType,
+          levelFilter,
+          searchQuery,
+          searchInput,
+          linesCount,
+        })
+      );
+    } catch {
+      // Ignorar errores de acceso a localStorage
+    }
+  }, [instanceName, selectedLogType, levelFilter, searchQuery, searchInput, linesCount]);
 
   const getToken = () => localStorage.getItem('access_token');
 
