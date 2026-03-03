@@ -1,6 +1,10 @@
 import psutil
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+ARGENTINA_TIMEZONE = 'America/Argentina/Buenos_Aires'
+ARGENTINA_TZ = ZoneInfo(ARGENTINA_TIMEZONE)
 
 class SystemMonitor:
     """Monitor del sistema para obtener métricas en tiempo real"""
@@ -90,6 +94,7 @@ class SystemMonitor:
         import platform
         boot_time = datetime.fromtimestamp(psutil.boot_time())
         uptime_seconds = (datetime.now() - boot_time).total_seconds()
+        server_now = datetime.now(ARGENTINA_TZ)
         uname = platform.uname()
         
         return {
@@ -99,6 +104,8 @@ class SystemMonitor:
             'platform_version': uname.version,
             'architecture': uname.machine,
             'boot_time': boot_time.isoformat(),
+            'server_datetime': server_now.isoformat(),
+            'server_timezone': ARGENTINA_TIMEZONE,
             'uptime_seconds': int(uptime_seconds),
             'uptime_formatted': self._format_uptime(uptime_seconds)
         }
@@ -121,8 +128,9 @@ class SystemMonitor:
     
     def get_all_metrics(self):
         """Obtiene todas las métricas del sistema"""
+        current_time = datetime.now(ARGENTINA_TZ)
         return {
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': current_time.isoformat(),
             'cpu': self.get_cpu_info(),
             'memory': self.get_memory_info(),
             'disk': self.get_disk_info(),

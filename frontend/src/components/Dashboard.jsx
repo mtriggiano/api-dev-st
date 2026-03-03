@@ -34,6 +34,21 @@ const formatTooltipLabel = (value) => {
   });
 };
 
+const formatArgentinaDateTime = (value) => {
+  if (!value) return '-';
+
+  return new Date(value).toLocaleString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+};
+
 const buildSeriesStats = (rows, key) => {
   const values = rows
     .map((row) => Number(row?.[key]))
@@ -149,6 +164,8 @@ export default function Dashboard() {
   }
 
   const { cpu, memory, disk, network, system } = currentMetrics;
+  const serverDateTime = system?.server_datetime || currentMetrics?.timestamp;
+  const serverTimezone = system?.server_timezone || 'America/Argentina/Buenos_Aires';
 
   return (
     <div className="space-y-6">
@@ -164,6 +181,10 @@ export default function Dashboard() {
               <Clock className="w-5 h-5" />
               <span>Uptime: {system.uptime_formatted}</span>
             </div>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+              Fecha y hora servidor (AR): {formatArgentinaDateTime(serverDateTime)}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Zona horaria: {serverTimezone}</p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{system.platform} {system.platform_release}</p>
           </div>
         </div>

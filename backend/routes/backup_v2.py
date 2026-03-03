@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request, send_file
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import User, ActionLog, db
 from services.backup_manager_v2 import BackupManagerV2
+from services.access_control import can_user_access_instance, filter_instances_for_user
 import os
 from datetime import datetime
 import logging
@@ -11,6 +12,21 @@ logger.setLevel(logging.DEBUG)
 
 backup_v2_bp = Blueprint('backup_v2', __name__)
 manager = BackupManagerV2()
+
+
+def _get_current_user():
+    user_id = int(get_jwt_identity())
+    return user_id, User.query.get(user_id)
+
+
+def _ensure_instance_access(user, instance_name):
+    if not user:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+
+    if can_user_access_instance(user, instance_name):
+        return None
+
+    return jsonify({'error': 'Permisos insuficientes'}), 403
 
 def log_action(user_id, action, instance_name=None, details=None, status='success'):
     """Registra una acción en el log"""
@@ -36,14 +52,14 @@ def log_action(user_id, action, instance_name=None, details=None, status='succes
 @jwt_required()
 def list_instances():
     """Lista todas las instancias con configuración de backup"""
-    user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
-    
-    if user.role != 'admin':
-        return jsonify({'error': 'Permisos insuficientes'}), 403
+    _, user = _get_current_user()
+    if not user:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
     
     try:
         result = manager.list_instances_with_backups()
+        result['instances'] = filter_instances_for_user(user, result.get('instances', []))
+        result['total_count'] = len(result['instances'])
         return jsonify(result), 200
     except Exception as e:
         logger.error(f"Error listing instances: {e}")
@@ -53,11 +69,10 @@ def list_instances():
 @jwt_required()
 def rename_instance_backup(instance_name, filename):
     """Renombra un backup específico"""
-    user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
-
-    if user.role != 'admin':
-        return jsonify({'error': 'Permisos insuficientes'}), 403
+    user_id, user = _get_current_user()
+    access_error = _ensure_instance_access(user, instance_name)
+    if access_error:
+        return access_error
 
     try:
         data = request.get_json() or {}
@@ -85,11 +100,10 @@ def rename_instance_backup(instance_name, filename):
 @jwt_required()
 def get_instance_config(instance_name):
     """Obtiene la configuración de backup de una instancia"""
-    user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
-    
-    if user.role != 'admin':
-        return jsonify({'error': 'Permisos insuficientes'}), 403
+    _, user = _get_current_user()
+    access_error = _ensure_instance_access(user, instance_name)
+    if access_error:
+        return access_error
     
     try:
         result = manager.get_instance_config(instance_name)
@@ -102,11 +116,10 @@ def get_instance_config(instance_name):
 @jwt_required()
 def update_instance_config(instance_name):
     """Actualiza la configuración de backup de una instancia"""
-    user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
-    
-    if user.role != 'admin':
-        return jsonify({'error': 'Permisos insuficientes'}), 403
+    user_id, user = _get_current_user()
+    access_error = _ensure_instance_access(user, instance_name)
+    if access_error:
+        return access_error
     
     try:
         data = request.get_json() or {}
@@ -137,11 +150,10 @@ def update_instance_config(instance_name):
 @jwt_required()
 def toggle_auto_backup(instance_name):
     """Activa o pausa el backup automático de una instancia"""
-    user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
-    
-    if user.role != 'admin':
-        return jsonify({'error': 'Permisos insuficientes'}), 403
+    user_id, user = _get_current_user()
+    access_error = _ensure_instance_access(user, instance_name)
+    if access_error:
+        return access_error
     
     try:
         data = request.get_json() or {}
@@ -172,11 +184,10 @@ def toggle_auto_backup(instance_name):
 @jwt_required()
 def list_instance_backups(instance_name):
     """Lista todos los backups de una instancia"""
-    user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
-    
-    if user.role != 'admin':
-        return jsonify({'error': 'Permisos insuficientes'}), 403
+    _, user = _get_current_user()
+    access_error = _ensure_instance_access(user, instance_name)
+    if access_error:
+        return access_error
     
     try:
         result = manager.list_backups(instance_name)
@@ -189,11 +200,10 @@ def list_instance_backups(instance_name):
 @jwt_required()
 def create_instance_backup(instance_name):
     """Crea un backup manual de una instancia"""
-    user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
-    
-    if user.role != 'admin':
-        return jsonify({'error': 'Permisos insuficientes'}), 403
+    user_id, user = _get_current_user()
+    access_error = _ensure_instance_access(user, instance_name)
+    if access_error:
+        return access_error
     
     try:
         data = request.get_json(silent=True) or {}
@@ -219,11 +229,10 @@ def create_instance_backup(instance_name):
 @jwt_required()
 def delete_instance_backup(instance_name, filename):
     """Elimina un backup específico de una instancia"""
-    user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
-    
-    if user.role != 'admin':
-        return jsonify({'error': 'Permisos insuficientes'}), 403
+    user_id, user = _get_current_user()
+    access_error = _ensure_instance_access(user, instance_name)
+    if access_error:
+        return access_error
     
     try:
         result = manager.delete_backup(instance_name, filename)
@@ -246,11 +255,10 @@ def delete_instance_backup(instance_name, filename):
 @jwt_required()
 def download_instance_backup(instance_name, filename):
     """Descarga un backup específico"""
-    user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
-    
-    if user.role != 'admin':
-        return jsonify({'error': 'Permisos insuficientes'}), 403
+    user_id, user = _get_current_user()
+    access_error = _ensure_instance_access(user, instance_name)
+    if access_error:
+        return access_error
     
     try:
         instance_dir = manager._get_instance_dir(instance_name)
@@ -281,11 +289,10 @@ def download_instance_backup(instance_name, filename):
 @jwt_required()
 def restore_instance_backup(instance_name):
     """Restaura un backup de una instancia"""
-    user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
-    
-    if user.role != 'admin':
-        return jsonify({'error': 'Permisos insuficientes'}), 403
+    user_id, user = _get_current_user()
+    access_error = _ensure_instance_access(user, instance_name)
+    if access_error:
+        return access_error
     
     try:
         data = request.get_json() or {}
@@ -318,11 +325,10 @@ def restore_instance_backup(instance_name):
 @jwt_required()
 def get_instance_backup_log(instance_name):
     """Obtiene el log del último backup de una instancia"""
-    user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
-    
-    if user.role != 'admin':
-        return jsonify({'error': 'Permisos insuficientes'}), 403
+    _, user = _get_current_user()
+    access_error = _ensure_instance_access(user, instance_name)
+    if access_error:
+        return access_error
     
     try:
         result = manager.get_backup_log(instance_name)
@@ -335,11 +341,10 @@ def get_instance_backup_log(instance_name):
 @jwt_required()
 def get_instance_restore_log(instance_name):
     """Obtiene el log de la última restauración de una instancia"""
-    user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
-    
-    if user.role != 'admin':
-        return jsonify({'error': 'Permisos insuficientes'}), 403
+    _, user = _get_current_user()
+    access_error = _ensure_instance_access(user, instance_name)
+    if access_error:
+        return access_error
     
     try:
         result = manager.get_restore_log(instance_name)
@@ -378,8 +383,7 @@ def get_global_stats():
 def upload_backup(instance_name):
     """Sube un archivo de backup para una instancia específica"""
     import sys
-    user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
+    user_id, user = _get_current_user()
     
     logger.info("=" * 80)
     logger.info(f"🎯 ENDPOINT /instances/{instance_name}/upload LLAMADO")
@@ -387,8 +391,9 @@ def upload_backup(instance_name):
     logger.info(f"📋 Request content_type: {request.content_type}")
     sys.stdout.flush()
     
-    if user.role != 'admin':
-        return jsonify({'error': 'Permisos insuficientes'}), 403
+    access_error = _ensure_instance_access(user, instance_name)
+    if access_error:
+        return access_error
     
     try:
         logger.info(f"📥 Request de upload recibido de usuario {user_id} ({user.username})")
