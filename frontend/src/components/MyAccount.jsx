@@ -27,6 +27,7 @@ export default function MyAccount() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [sshPublicKey, setSshPublicKey] = useState('');
+  const linkedSystemUser = user.system_username || `apidev_u${user.id}`;
 
   const loadMe = async () => {
     setLoading(true);
@@ -197,7 +198,7 @@ export default function MyAccount() {
           </div>
           <div className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 md:col-span-2">
             <p className="text-gray-500 dark:text-gray-400">Usuario Linux ligado</p>
-            <p className="font-semibold text-gray-900 dark:text-white">{user.system_username || `apidev_u${user.id}`}</p>
+            <p className="font-semibold text-gray-900 dark:text-white">{linkedSystemUser}</p>
           </div>
         </div>
 
@@ -251,6 +252,32 @@ export default function MyAccount() {
         <p className="text-sm text-gray-600 dark:text-gray-300">
           Pega tu clave publica SSH para acceder con tu usuario Linux ligado y trabajar en tus instancias asignadas.
         </p>
+
+        <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/30 p-4 space-y-3 text-xs text-slate-700 dark:text-slate-200">
+          <p className="font-semibold">Guia rapida para macOS</p>
+          <ol className="list-decimal pl-5 space-y-2">
+            <li>
+              Genera la clave SSH en Terminal:
+              <pre className="mt-1 overflow-x-auto rounded bg-slate-900 text-slate-100 px-2 py-1">ssh-keygen -t ed25519 -C "tu_email@empresa.com"</pre>
+            </li>
+            <li>
+              Copia la clave publica al portapapeles:
+              <pre className="mt-1 overflow-x-auto rounded bg-slate-900 text-slate-100 px-2 py-1">pbcopy &lt; ~/.ssh/id_ed25519.pub</pre>
+            </li>
+            <li>Pegala en el campo de abajo y presiona <strong>Guardar clave SSH</strong>.</li>
+            <li>
+              Configura un alias en <code>~/.ssh/config</code> para entrar mas rapido:
+              <pre className="mt-1 overflow-x-auto rounded bg-slate-900 text-slate-100 px-2 py-1">Host apidev-miusuario
+  HostName TU_SERVIDOR_O_IP
+  User {linkedSystemUser}
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes</pre>
+            </li>
+          </ol>
+          <p>
+            Luego conectas directo con: <code>ssh apidev-miusuario</code>
+          </p>
+        </div>
 
         <textarea
           rows={4}
