@@ -467,7 +467,15 @@ echo "✅ Assets regenerados correctamente"
 
         return True, created_scripts
     
-    def create_dev_instance(self, name: str, source_instance: str = None, neutralize: bool = True, git_branch: str = ''):
+    def create_dev_instance(
+        self,
+        name: str,
+        source_instance: str = None,
+        neutralize: bool = True,
+        git_branch: str = '',
+        system_username: str = '',
+        system_instance_accesses=None,
+    ):
         """
         Crea una nueva instancia de desarrollo clonando desde producción
         Args:
@@ -501,6 +509,11 @@ echo "✅ Assets regenerados correctamente"
             
             # Agregar rama Git como quinto argumento (opcional)
             script_args.append(git_branch if git_branch else '')
+
+            # Agregar usuario Linux y asignaciones para ACL (opcional)
+            script_args.append(system_username if system_username else '')
+            system_access_arg = ','.join(system_instance_accesses or [])
+            script_args.append(system_access_arg)
             
             # El nombre de la instancia completa incluye el prefijo "dev-"
             instance_name = f'dev-{name}'

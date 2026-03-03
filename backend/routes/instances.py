@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from services.instance_manager import InstanceManager
 from models import db, ActionLog, User
 from services.access_control import can_user_access_instance, filter_instances_for_user, grant_user_instance_access
+from services.system_user_access import get_system_username
 
 instances_bp = Blueprint('instances', __name__)
 manager = InstanceManager()
@@ -103,9 +104,23 @@ def create_instance():
     
     # Obtener rama Git (opcional)
     git_branch = data.get('gitBranch', '').strip()
+
+    system_username = ''
+    system_accesses = []
+    if user.role != 'admin':
+        system_username = get_system_username(user)
+        expected_instance_name = f"dev-{data['name'].strip().lower()}"
+        system_accesses = sorted(set(user.assigned_instances() + [expected_instance_name]))
     
     try:
-        result = manager.create_dev_instance(data['name'], source_instance, neutralize, git_branch)
+        result = manager.create_dev_instance(
+            data['name'],
+            source_instance,
+            neutralize,
+            git_branch,
+            system_username,
+            system_accesses,
+        )
         
         # Log
         source_msg = f" desde {source_instance}" if source_instance else ""

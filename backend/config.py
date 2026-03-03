@@ -30,6 +30,8 @@ class Config:
     PUERTOS_FILE = os.getenv('PUERTOS_FILE', f'{DATA_PATH}/puertos_ocupados_odoo.txt')
     DEV_INSTANCES_FILE = os.getenv('DEV_INSTANCES_FILE', f'{DATA_PATH}/dev-instances.txt')
     BACKUPS_PATH = os.getenv('BACKUPS_PATH', '/home/mtg/backups')
+    SYSTEM_USER_SYNC_SCRIPT = os.getenv('SYSTEM_USER_SYNC_SCRIPT', f'{SCRIPTS_PATH}/users/sync-instance-access.sh')
+    SYSTEM_USER_SSH_KEY_SCRIPT = os.getenv('SYSTEM_USER_SSH_KEY_SCRIPT', f'{SCRIPTS_PATH}/users/set-ssh-public-key.sh')
     
     # Domain configuration - IMPORTANTE: El dominio raíz está protegido
     DOMAIN_ROOT = os.getenv('DOMAIN_ROOT', 'softrigx.com')

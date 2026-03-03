@@ -25,12 +25,16 @@ class User(db.Model):
 
     def assigned_instances(self):
         return sorted({access.instance_name for access in self.instance_accesses})
+
+    def system_username(self):
+        return f'apidev_u{self.id}'
     
     def to_dict(self):
         return {
             'id': self.id,
             'username': self.username,
             'role': self.role,
+            'system_username': self.system_username(),
             'first_name': self.profile.first_name if self.profile else '',
             'last_name': self.profile.last_name if self.profile else '',
             'assigned_instances': self.assigned_instances(),

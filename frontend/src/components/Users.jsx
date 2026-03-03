@@ -48,9 +48,12 @@ export default function Users() {
   const [instances, setInstances] = useState([]);
   const [createForm, setCreateForm] = useState(emptyCreateForm);
   const [editForm, setEditForm] = useState(emptyEditForm);
+  const [sshPublicKey, setSshPublicKey] = useState('');
   const [loading, setLoading] = useState(true);
   const [savingCreate, setSavingCreate] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [savingSshKey, setSavingSshKey] = useState(false);
+  const [syncingSystemAccess, setSyncingSystemAccess] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -146,8 +149,70 @@ export default function Users() {
       last_name: user.last_name || '',
       assigned_instances: normalizeInstances(user.assigned_instances || []),
     });
+    setSshPublicKey('');
     setError('');
     setSuccess('');
+  };
+
+  const handleSyncSystemAccess = async () => {
+    if (!editForm.id) return;
+
+    setSyncingSystemAccess(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await fetch(`${API_URL}/api/users/${editForm.id}/sync-system-access`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'No se pudo sincronizar el usuario Linux');
+      }
+
+      setSuccess(data.message || 'Permisos Linux sincronizados correctamente');
+      await loadData();
+    } catch (err) {
+      setError(err.message || 'Error sincronizando permisos Linux');
+    } finally {
+      setSyncingSystemAccess(false);
+    }
+  };
+
+  const handleSaveSshKey = async () => {
+    if (!editForm.id) return;
+
+    const key = sshPublicKey.trim();
+    if (!key) {
+      setError('Pega una clave pública SSH antes de guardar');
+      return;
+    }
+
+    setSavingSshKey(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await fetch(`${API_URL}/api/users/${editForm.id}/ssh-key`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ public_key: key }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'No se pudo guardar la clave SSH');
+      }
+
+      setSuccess(data.message || 'Clave SSH configurada correctamente');
+      setSshPublicKey('');
+    } catch (err) {
+      setError(err.message || 'Error configurando la clave SSH');
+    } finally {
+      setSavingSshKey(false);
+    }
   };
 
   const handleUpdateUser = async (event) => {
@@ -268,6 +333,25 @@ export default function Users() {
             {ROLES.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
           </select>
 
+          {editForm.id && (
+            <div className="rounded-lg border border-blue-200 dark:border-blue-700/40 bg-blue-50/70 dark:bg-blue-900/20 p-3 text-sm">
+              <p className="text-gray-700 dark:text-gray-200">
+                Usuario Linux ligado: <span className="font-semibold">apidev_u{editForm.id}</span>
+              </p>
+              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                Estado: {users.find((item) => item.id === editForm.id)?.system_user_exists ? 'creado' : 'no creado'}
+              </p>
+              <button
+                type="button"
+                onClick={handleSyncSystemAccess}
+                disabled={syncingSystemAccess}
+                className="mt-2 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs disabled:opacity-60"
+              >
+                {syncingSystemAccess ? 'Sincronizando...' : 'Sincronizar permisos Linux'}
+              </button>
+            </div>
+          )}
+
           <div>
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Instancias asignadas</p>
             <div className="max-h-48 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
@@ -283,6 +367,26 @@ export default function Users() {
           <button type="submit" disabled={!editForm.id || savingEdit} className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg disabled:opacity-60">
             {savingEdit ? 'Guardando...' : 'Guardar Cambios'}
           </button>
+
+          <div className="pt-2 border-t border-gray-200 dark:border-gray-700 space-y-2">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Clave pública SSH</p>
+            <textarea
+              rows={4}
+              value={sshPublicKey}
+              onChange={(e) => setSshPublicKey(e.target.value)}
+              disabled={!editForm.id || savingSshKey}
+              placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... usuario@equipo"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:opacity-60"
+            />
+            <button
+              type="button"
+              onClick={handleSaveSshKey}
+              disabled={!editForm.id || savingSshKey}
+              className="w-full bg-slate-700 hover:bg-slate-800 text-white py-2 rounded-lg disabled:opacity-60"
+            >
+              {savingSshKey ? 'Guardando clave...' : 'Guardar clave SSH'}
+            </button>
+          </div>
         </form>
       </div>
 
@@ -299,8 +403,12 @@ export default function Users() {
                   <p className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
                     <User className="w-4 h-4" /> {user.username}
                     {currentUser?.id === user.id && <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700">Tu cuenta</span>}
+                    <span className={`text-xs px-2 py-0.5 rounded ${user.system_user_exists ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                      Linux {user.system_user_exists ? 'OK' : 'pendiente'}
+                    </span>
                   </p>
                   <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{user.first_name || '-'} {user.last_name || ''}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Linux: {user.system_username || `apidev_u${user.id}`}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Instancias: {(user.assigned_instances || []).join(', ') || 'Sin asignar'}</p>
                 </div>
                 <div className="text-right">

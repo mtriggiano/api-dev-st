@@ -71,6 +71,10 @@ NEUTRALIZE_OPTION="${3:-neutralize}"
 # Detectar modo auto-confirm (cuarto argumento o variable de entorno)
 AUTO_CONFIRM="${4:-${AUTO_CONFIRM:-false}}"
 
+# Contexto opcional para ACL de usuario ligado a API-DEV
+APIDEV_SYSTEM_USER="${6:-}"
+APIDEV_ALLOWED_INSTANCES_CSV="${7:-}"
+
 if [[ -z "$PROD_INSTANCE" ]]; then
     # Si no se pasó como argumento, listar y preguntar
     echo ""
@@ -337,6 +341,29 @@ EOF
 
 touch "$ODOO_LOG"
 chown -R $USER:$USER "$BASE_DIR"
+
+# Sincronizar ACL para usuario Linux ligado al usuario API-DEV (opcional)
+if [[ -n "$APIDEV_SYSTEM_USER" ]]; then
+  SYNC_ACL_SCRIPT="$SCRIPTS_PATH/users/sync-instance-access.sh"
+  if [[ -f "$SYNC_ACL_SCRIPT" ]]; then
+    if [[ -n "$APIDEV_ALLOWED_INSTANCES_CSV" ]]; then
+      IFS=',' read -r -a APIDEV_ALLOWED_INSTANCES <<< "$APIDEV_ALLOWED_INSTANCES_CSV"
+      if /bin/bash "$SYNC_ACL_SCRIPT" "$APIDEV_SYSTEM_USER" "$PROD_ROOT" "$DEV_ROOT" "${APIDEV_ALLOWED_INSTANCES[@]}"; then
+        echo "🔐 ACL sincronizada para usuario $APIDEV_SYSTEM_USER"
+      else
+        echo "⚠️  No se pudo sincronizar ACL para $APIDEV_SYSTEM_USER"
+      fi
+    else
+      if /bin/bash "$SYNC_ACL_SCRIPT" "$APIDEV_SYSTEM_USER" "$PROD_ROOT" "$DEV_ROOT"; then
+        echo "🔐 ACL sincronizada para usuario $APIDEV_SYSTEM_USER"
+      else
+        echo "⚠️  No se pudo sincronizar ACL para $APIDEV_SYSTEM_USER"
+      fi
+    fi
+  else
+    echo "⚠️  Script de ACL no encontrado: $SYNC_ACL_SCRIPT"
+  fi
+fi
 
 # Crear servicio systemd
 echo "⚙️ Creando servicio systemd para Odoo..."

@@ -5,6 +5,7 @@ import Instances from './components/Instances';
 import Logs from './components/Logs';
 import BackupsV2 from './components/BackupsV2';
 import Users from './components/Users';
+import MyAccount from './components/MyAccount';
 import Layout from './components/Layout';
 
 function PrivateRoute({ children }) {
@@ -69,6 +70,16 @@ function App() {
             <PrivateRoute>
               <Layout>
                 <BackupsV2 />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/account"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <MyAccount />
               </Layout>
             </PrivateRoute>
           }
